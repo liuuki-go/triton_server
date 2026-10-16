@@ -230,10 +230,16 @@ def main():
                  if model_id == fixture["modelId"]]
         for index, (fixture, model) in enumerate(cases):
             selected = control.call("/api/models/select", {"ModelId": model["id"], "RequestedModelVersion": model["businessVersion"]})
+            assert set(selected) == {"ok", "modelReady", "activeModel"}
+            assert set(selected["activeModel"]) == {"id", "version"}
             assert selected["activeModel"]["id"] == model["id"]
             assert selected["activeModel"]["version"] == model["businessVersion"]
-            assert selected["modelReady"] and selected["activeModel"]["ready"]
-            versions = [version for group in selected["models"] for version in group["versions"]]
+            assert selected["modelReady"]
+            status = control.call("/api/status")
+            assert status["modelReady"] and status["activeModel"]["ready"]
+            assert status["activeModel"]["id"] == model["id"]
+            assert status["activeModel"]["version"] == model["businessVersion"]
+            versions = [version for group in status["models"] for version in group["versions"]]
             assert sum(version["ready"] for version in versions) == 1
             assert sum(version["active"] for version in versions) == 1
             report["models"].setdefault(model["id"], {})[model["businessVersion"]] = {

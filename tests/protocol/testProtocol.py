@@ -173,6 +173,8 @@ class ProtocolTests(unittest.TestCase):
     def select_model(self, model, version="1.0.0"):
         selection = {"ModelId": model, "RequestedModelVersion": version}
         body = self.assert_json(http("POST", "/api/models/select", json_bytes(selection), "application/json"), 200)
+        self.assertEqual(set(body), {"ok", "modelReady", "activeModel"})
+        self.assertEqual(set(body["activeModel"]), {"id", "version"})
         self.assertEqual(body["activeModel"]["id"], model)
         self.assertEqual(body["activeModel"]["version"], version)
         self.assertTrue(body["modelReady"])
@@ -340,12 +342,15 @@ class ProtocolTests(unittest.TestCase):
         for model in catalog["models"]:
             for version in model["versions"]:
                 selected = self.select_model(model["id"], version["version"])
-                self.assert_model_catalog(selected)
+                status = self.assert_json(http("GET", "/api/status"), 200)
+                self.assert_model_catalog(status)
+                self.assertEqual(status["activeModel"]["id"], selected["activeModel"]["id"])
+                self.assertEqual(status["activeModel"]["version"], selected["activeModel"]["version"])
                 request = metadata(model["id"], RequestedModelVersion=version["version"])
                 self.assert_success(infer(request), request)
-        selected = self.select_model("yolo26n")
-        self.assertEqual(sum(version["ready"] for model in selected["models"] for version in model["versions"]), 1)
+        self.select_model("yolo26n")
         status = self.assert_json(http("GET", "/api/status"), 200)
+        self.assertEqual(sum(version["ready"] for model in status["models"] for version in model["versions"]), 1)
         self.assertEqual(status["activeModel"]["id"], "yolo26n")
         request = metadata("best")
         self.assert_error(infer(request), 409, "MODEL_NOT_ACTIVE", request)

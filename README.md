@@ -104,10 +104,10 @@ PNG 的 `Width`、`Height` 必须与文件像素尺寸一致，`PixelFormat`、`
 | 接口 | 用途 |
 | --- | --- |
 | `GET /api/status` | 默认返回完整状态；`?simple=true` 只返回简要状态、模型版本及文件可用性；有效查询返回 200，`modelReady` 表示可推理 |
-| `POST /api/models/select` | 显式指定 `ModelId`、`RequestedModelVersion`；新模型加载、校验和预热成功后切流，失败保持旧模型 |
+| `POST /api/models/select` | 显式指定 `ModelId`、`RequestedModelVersion`；成功只返回 `ok`、`modelReady`、`activeModel`，失败另含 `error`、`message` |
 | `POST /infer` | 唯一推理入口 |
 
-状态查询支持 `?simple`、`?simple=true` 或 `?simple=1` 返回简版；不传参数、`?simple=false` 或 `?simple=0` 返回原有完整版。非法取值或值不同的重复 `simple` 参数返回 `400 INVALID_QUERY`，相同值重复按一个值处理。简版字段与示例见 [windows-host.md](docs/windows-host.md)；选择接口的响应始终保持完整。
+状态查询支持 `?simple`、`?simple=true` 或 `?simple=1` 返回简版；不传参数、`?simple=false` 或 `?simple=0` 返回原有完整版。非法取值或值不同的重复 `simple` 参数返回 `400 INVALID_QUERY`，相同值重复按一个值处理。简版字段与示例见 [windows-host.md](docs/windows-host.md)。选择接口固定返回最小结果，`activeModel` 为 null 或仅含 `id`、`version`；新模型成功才切流，失败保持旧模型。详细状态和诊断信息另查 `GET /api/status`。
 
 Apifox 调试可直接导入 [Postman Collection 文件](docs/triton-back.postman_collection.json)：在「导入」中选择 Postman，上传 JSON，并同时导入、选中同名环境。文件包含以上三个接口和 `best / 2.0.0` 请求示例，默认地址 `http://127.0.0.1:6577`，首个请求默认查询简版状态；禁用 `simple` 参数或改为 `false` 可查询完整版。推理前在 `image` 中选择本地 PNG，将 `metadata` 的 `Width`、`Height` 改为图片实际尺寸，并确认该表单字段的 Content-Type 为 `application/json`。
 

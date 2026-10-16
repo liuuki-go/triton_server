@@ -13,6 +13,12 @@ namespace triton_backend
 
 using Json = nlohmann::json;
 
+static Json modelIdentity(const Json& model)
+{
+    if (model.is_null()) return nullptr;
+    return {{"id", model.at("id")}, {"version", model.at("version")}};
+}
+
 BackendHttpServer::BackendHttpServer(IBackendService& service, const BackendConfig& config)
     : service_(service), config_(config)
 {
@@ -47,11 +53,6 @@ Json BackendHttpServer::status(bool simple) const
     body["imageEncodings"] = {"Png", "Raw"};
     if (!simple) return body;
 
-    const auto identity = [](const Json& model) -> Json
-    {
-        if (model.is_null()) return nullptr;
-        return {{"id", model.at("id")}, {"version", model.at("version")}};
-    };
     Json models = Json::array();
     for (const auto& model : body.at("models"))
     {
@@ -65,12 +66,19 @@ Json BackendHttpServer::status(bool simple) const
     }
     return {{"ok", body.at("ok")}, {"state", body.at("state")},
             {"modelReady", body.at("modelReady")},
-            {"activeModel", identity(body.at("activeModel"))},
+            {"activeModel", modelIdentity(body.at("activeModel"))},
             {"models", std::move(models)}, {"switching", body.at("switching")},
-            {"pendingModel", identity(body.at("pendingModel"))},
+            {"pendingModel", modelIdentity(body.at("pendingModel"))},
             {"lastError", body.at("lastError")}, {"schemaVersion", body.at("schemaVersion")},
             {"imageEncodings", body.at("imageEncodings")},
             {"heartbeatIntervalMs", body.at("heartbeatIntervalMs")}};
+}
+
+Json BackendHttpServer::selectionStatus() const
+{
+    const auto body = service_.status();
+    return {{"ok", body.at("ok")}, {"modelReady", body.at("modelReady")},
+            {"activeModel", modelIdentity(body.at("activeModel"))}};
 }
 
 void BackendHttpServer::registerRoutes()
@@ -135,14 +143,20 @@ void BackendHttpServer::registerRoutes()
     });
     server_.Post("/api/models/select", [this](const httplib::Request& request, httplib::Response& response)
     {
+        const auto fail = [this, &response](int code, const std::string& error, const std::string& message)
+        {
+            auto body = selectionStatus();
+            body.update(makeError(error, message));
+            sendJson(response, code, body);
+        };
         if (!hasMediaType(request.get_header_value("Content-Type"), "application/json", true))
         {
-            sendJson(response, 415, makeError("UNSUPPORTED_CONTENT_TYPE", "控制请求使用 application/json"));
+            fail(415, "UNSUPPORTED_CONTENT_TYPE", "控制请求使用 application/json");
             return;
         }
         if (request.body.size() > config_.server.maxMetadataBytes)
         {
-            sendJson(response, 413, makeError("METADATA_TOO_LARGE", "控制请求超过大小上限"));
+            fail(413, "METADATA_TOO_LARGE", "控制请求超过大小上限");
             return;
         }
         Json body;
@@ -154,38 +168,30 @@ void BackendHttpServer::registerRoutes()
         }
         catch (const Json::exception& error)
         {
-            sendJson(response, 400, makeError("INVALID_JSON", error.what()));
+            fail(400, "INVALID_JSON", error.what());
             return;
         }
         catch (const InvalidInferenceRequest& error)
         {
-            sendJson(response, 400, makeError(error.code(), error.what()));
+            fail(400, error.code(), error.what());
             return;
         }
         try
         {
             service_.selectModel(selection);
-            sendJson(response, 200, status());
+            sendJson(response, 200, selectionStatus());
         }
         catch (const InvalidInferenceRequest& error)
         {
-            auto result = status();
-            result.update(makeError(error.code(), error.what()));
-            sendJson(response, 404, result);
+            fail(404, error.code(), error.what());
         }
         catch (const BackendNotReady& error)
         {
-            auto result = status();
-            result.update(makeError("BACKEND_NOT_READY", error.what()));
-            sendJson(response, 503, result);
+            fail(503, "BACKEND_NOT_READY", error.what());
         }
         catch (const std::exception& error)
         {
-            auto body = status();
-            body["ok"] = false;
-            body["error"] = "MODEL_CONTROL_FAILED";
-            body["message"] = error.what();
-            sendJson(response, 500, body);
+            fail(500, "MODEL_CONTROL_FAILED", error.what());
         }
     });
     server_.Post("/infer", [this](const httplib::Request& request, httplib::Response& response)
@@ -264,9 +270,16 @@ void BackendHttpServer::registerRoutes()
         catch (const InferenceOverloaded& error) { fail(503, "SERVICE_BUSY", error.what()); }
         catch (const std::exception& error) { fail(500, "INFERENCE_FAILED", error.what()); }
     });
-    server_.set_error_handler([](const httplib::Request&, httplib::Response& response)
+    server_.set_error_handler([this](const httplib::Request& request, httplib::Response& response)
     {
         if (response.get_header_value("Content-Type").find("application/json") != std::string::npos) return;
+        if (response.status == 413 && request.method == "POST" && request.path == "/api/models/select")
+        {
+            auto body = selectionStatus();
+            body.update(makeError("PAYLOAD_TOO_LARGE", "请求体超过字节上限"));
+            sendJson(response, 413, body);
+            return;
+        }
         if (response.status == 404) sendJson(response, 404, makeError("NOT_FOUND", "接口不存在"));
         else if (response.status == 413) sendJson(response, 413, makeError("PAYLOAD_TOO_LARGE", "请求体超过字节上限"));
         else if (response.status == 400) sendJson(response, 400, makeError("INVALID_MULTIPART", "HTTP 或 multipart 请求无效"));

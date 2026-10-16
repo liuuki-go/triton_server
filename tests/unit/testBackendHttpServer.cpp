@@ -93,6 +93,7 @@ protected:
     {
         BackendConfig config;
         config.server.port = 0;
+        config.server.maxRequestBodyBytes = 65536;
         config.server.allowedOrigins = {"http://localhost:8090"};
         config.models.push_back(ModelConfig{"best", "1.0.0", "best", 1, 960, {{0, "测试类别"}}});
         config.models.push_back(ModelConfig{"best", "2.0.0", "best", 2, 960, {{0, "测试类别"}}});
@@ -126,6 +127,17 @@ protected:
             {"metadata", body.dump(), "", "application/json; charset=utf-8"},
             {"image", image, "", contentType}};
         return client->Post("/infer", parts);
+    }
+    void expectSelectionError(const httplib::Result& response, int status, const std::string& error,
+                              bool modelReady = false, const Json& activeModel = nullptr)
+    {
+        ASSERT_TRUE(response);
+        ASSERT_EQ(response->status, status);
+        const auto body = Json::parse(response->body);
+        ASSERT_TRUE(body.at("message").is_string());
+        EXPECT_FALSE(body.at("message").get<std::string>().empty());
+        EXPECT_EQ(body, (Json{{"ok", false}, {"modelReady", modelReady}, {"activeModel", activeModel},
+            {"error", error}, {"message", body.at("message")}}));
     }
 
     MockBackendService service;
@@ -285,26 +297,25 @@ TEST_F(BackendHttpServerTest, RemovedRoutesReturnNotFoundAndCannotControlModels)
 
 TEST_F(BackendHttpServerTest, OneSelectionRouteLoadsInitiallyAndSwitchesToAnotherVersion)
 {
-    for (const char* version : {"1.0.0", "2.0.0"})
+    for (const char* version : {"1.0.0", "2.0.0", "2.0.0"})
     {
         const Json selection{{"ModelId", "best"}, {"RequestedModelVersion", version}};
         const auto selected = client->Post("/api/models/select", selection.dump(), "application/json");
         ASSERT_TRUE(selected);
         ASSERT_EQ(selected->status, 200);
-        const auto body = Json::parse(selected->body);
-        EXPECT_EQ(body.at("activeModel").at("version"), version);
-        EXPECT_TRUE(body.at("modelReady"));
-        EXPECT_TRUE(body.contains("imageEncodings"));
-        EXPECT_TRUE(body.contains("serviceAlive"));
-        EXPECT_TRUE(body.contains("triton"));
-        EXPECT_TRUE(body.contains("pixelFormats"));
-        EXPECT_TRUE(body.at("activeModel").contains("tritonVersion"));
-        EXPECT_EQ(body.at("models")[0].at("versions").size(), 2U);
+        EXPECT_EQ(Json::parse(selected->body), (Json{{"ok", true}, {"modelReady", true},
+            {"activeModel", {{"id", "best"}, {"version", version}}}}));
     }
-    EXPECT_EQ(service.selectCalls, 2);
     const auto status = client->Get("/api/status");
     ASSERT_TRUE(status);
-    EXPECT_EQ(Json::parse(status->body).at("activeModel").at("version"), "2.0.0");
+    ASSERT_EQ(status->status, 200);
+    const auto full = Json::parse(status->body);
+    EXPECT_EQ(full.at("activeModel").at("version"), "2.0.0");
+    EXPECT_TRUE(full.contains("serviceAlive"));
+    EXPECT_TRUE(full.contains("triton"));
+    EXPECT_TRUE(full.contains("pixelFormats"));
+    EXPECT_TRUE(full.at("activeModel").contains("tritonVersion"));
+    EXPECT_EQ(full.at("models")[0].at("versions").size(), 2U);
     auto frame = metadata();
     frame["RequestedModelVersion"] = "2.0.0";
     const auto response = infer(frame);
@@ -320,16 +331,37 @@ TEST_F(BackendHttpServerTest, MissingSelectionReturnsClearErrorAndMalformedContr
         Json{{"ModelId", "best"}, {"RequestedModelVersion", "1.0.0"}, {"extra", true}}})
     {
         const auto response = client->Post("/api/models/select", body.dump(), "application/json");
-        ASSERT_TRUE(response);
-        EXPECT_EQ(response->status, 400);
+        expectSelectionError(response, 400,
+            body.contains("RequestedModelVersion") && body.at("RequestedModelVersion").is_number()
+                ? "INVALID_METADATA" : "INVALID_REQUEST");
     }
     for (const auto& missing : {ModelSelection{"unknown", "1.0.0"}, ModelSelection{"best", "unknown"}})
     {
         const Json body{{"ModelId", missing.modelId}, {"RequestedModelVersion", missing.version}};
         const auto response = client->Post("/api/models/select", body.dump(), "application/json");
-        ASSERT_TRUE(response);
-        EXPECT_EQ(response->status, 404);
-        EXPECT_EQ(Json::parse(response->body).at("error"), missing.modelId == "unknown" ? "MODEL_NOT_FOUND" : "MODEL_VERSION_NOT_FOUND");
+        expectSelectionError(response, 404,
+            missing.modelId == "unknown" ? "MODEL_NOT_FOUND" : "MODEL_VERSION_NOT_FOUND");
+    }
+    EXPECT_EQ(service.selectCalls, 0);
+}
+
+TEST_F(BackendHttpServerTest, SelectionFailuresWithoutAnActiveModelReturnOnlyErrorAndNullIdentity)
+{
+    const Json selection{{"ModelId", "best"}, {"RequestedModelVersion", "1.0.0"}};
+    const auto malformed = client->Post("/api/models/select", "not-json", "application/json");
+    expectSelectionError(malformed, 400, "INVALID_JSON");
+    const auto unsupported = client->Post("/api/models/select", selection.dump(), "text/plain");
+    expectSelectionError(unsupported, 415, "UNSUPPORTED_CONTENT_TYPE");
+    const auto oversized = client->Post("/api/models/select", std::string(20000, 'x'), "application/json");
+    expectSelectionError(oversized, 413, "METADATA_TOO_LARGE");
+    const auto payloadTooLarge = client->Post("/api/models/select", std::string(65537, 'x'), "application/json");
+    expectSelectionError(payloadTooLarge, 413, "PAYLOAD_TOO_LARGE");
+    for (int failure : {1, 2})
+    {
+        service.selectionFailure = failure;
+        const auto response = client->Post("/api/models/select", selection.dump(), "application/json");
+        expectSelectionError(response, failure == 1 ? 503 : 500,
+            failure == 1 ? "BACKEND_NOT_READY" : "MODEL_CONTROL_FAILED");
     }
     EXPECT_EQ(service.selectCalls, 0);
 }
@@ -337,31 +369,36 @@ TEST_F(BackendHttpServerTest, MissingSelectionReturnsClearErrorAndMalformedContr
 TEST_F(BackendHttpServerTest, SelectionRejectsInvalidContentAndPreservesActiveModelOnLoadFailure)
 {
     const Json selection{{"ModelId", "best"}, {"RequestedModelVersion", "1.0.0"}};
-    ASSERT_TRUE(client->Post("/api/models/select", selection.dump(), "application/json"));
-    for (const char* invalid : {"[]", "null", "not-json"})
+    const auto selected = client->Post("/api/models/select", selection.dump(), "application/json");
+    ASSERT_TRUE(selected);
+    ASSERT_EQ(selected->status, 200);
+    const Json activeModel{{"id", "best"}, {"version", "1.0.0"}};
+    for (const char* invalid : {"{}", "[]", "null", "not-json"})
     {
         const auto response = client->Post("/api/models/select", invalid, "application/json");
-        ASSERT_TRUE(response);
-        EXPECT_EQ(response->status, 400);
+        expectSelectionError(response, 400,
+            std::string(invalid) == "not-json" ? "INVALID_JSON" : "INVALID_REQUEST", true, activeModel);
     }
     const auto unsupported = client->Post("/api/models/select", selection.dump(), "text/plain");
-    ASSERT_TRUE(unsupported);
-    EXPECT_EQ(unsupported->status, 415);
+    expectSelectionError(unsupported, 415, "UNSUPPORTED_CONTENT_TYPE", true, activeModel);
     const auto oversized = client->Post("/api/models/select", std::string(20000, 'x'), "application/json");
-    ASSERT_TRUE(oversized);
-    EXPECT_EQ(oversized->status, 413);
+    expectSelectionError(oversized, 413, "METADATA_TOO_LARGE", true, activeModel);
+    const auto payloadTooLarge = client->Post("/api/models/select", std::string(65537, 'x'), "application/json");
+    expectSelectionError(payloadTooLarge, 413, "PAYLOAD_TOO_LARGE", true, activeModel);
+    for (const auto& missing : {ModelSelection{"unknown", "1.0.0"}, ModelSelection{"best", "unknown"}})
+    {
+        const Json target{{"ModelId", missing.modelId}, {"RequestedModelVersion", missing.version}};
+        const auto response = client->Post("/api/models/select", target.dump(), "application/json");
+        expectSelectionError(response, 404,
+            missing.modelId == "unknown" ? "MODEL_NOT_FOUND" : "MODEL_VERSION_NOT_FOUND", true, activeModel);
+    }
     for (int failure : {1, 2})
     {
         service.selectionFailure = failure;
         const Json target{{"ModelId", "best"}, {"RequestedModelVersion", "2.0.0"}};
         const auto response = client->Post("/api/models/select", target.dump(), "application/json");
-        ASSERT_TRUE(response);
-        EXPECT_EQ(response->status, failure == 1 ? 503 : 500);
-        const auto body = Json::parse(response->body);
-        EXPECT_FALSE(body.at("ok"));
-        EXPECT_TRUE(body.at("modelReady"));
-        EXPECT_EQ(body.at("activeModel").at("version"), "1.0.0");
-        EXPECT_EQ(body.at("error"), failure == 1 ? "BACKEND_NOT_READY" : "MODEL_CONTROL_FAILED");
+        expectSelectionError(response, failure == 1 ? 503 : 500,
+            failure == 1 ? "BACKEND_NOT_READY" : "MODEL_CONTROL_FAILED", true, activeModel);
     }
     EXPECT_EQ(service.selectCalls, 1);
 }

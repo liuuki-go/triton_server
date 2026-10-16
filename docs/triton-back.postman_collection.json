@@ -34,7 +34,7 @@
             }
           ]
         },
-        "description": "默认 GET /api/status?simple=true 查询简要状态和所有已注册模型版本。简版只含 ok、state、modelReady、activeModel、models、switching、pendingModel、lastError、schemaVersion、imageEncodings、heartbeatIntervalMs；activeModel/pendingModel 为 null 或仅含 id/version，models 的每个版本只含 version/available。available 只表示 model.plan 文件存在。HTTP 200 只代表查询成功，modelReady=true 才表示可推理。若需张量、合批参数、执行统计或旧模型清理进度，请禁用 simple 参数，或改为 simple=false（也支持 0），返回原有完整状态。仅传 ?simple、simple=true、simple=1 均为简版；非法取值或值不同的重复 simple 参数返回 400 INVALID_QUERY，相同值重复按一个值处理。此接口不加载模型；选择接口的响应始终为完整状态。"
+        "description": "默认 GET /api/status?simple=true 查询简要状态和所有已注册模型版本。简版只含 ok、state、modelReady、activeModel、models、switching、pendingModel、lastError、schemaVersion、imageEncodings、heartbeatIntervalMs；activeModel/pendingModel 为 null 或仅含 id/version，models 的每个版本只含 version/available。available 只表示 model.plan 文件存在。HTTP 200 只代表查询成功，modelReady=true 才表示可推理。若需张量、合批参数、执行统计或旧模型清理进度，请禁用 simple 参数，或改为 simple=false（也支持 0），返回原有完整状态。仅传 ?simple、simple=true、simple=1 均为简版；非法取值或值不同的重复 simple 参数返回 400 INVALID_QUERY，相同值重复按一个值处理。此接口不加载模型；选择接口仅返回最小控制结果，详情另查本接口。"
       },
       "response": []
     },
@@ -66,7 +66,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["api", "models", "select"]
         },
-        "description": "首次加载与运行中切换共用此接口。请求 JSON 严格只有 ModelId 和 RequestedModelVersion 两个字段，名称及大小写必须一致。RequestedModelVersion 填查询接口返回的业务版本，例如 2.0.0。加载、校验、预热完成后才返回成功；检查 HTTP 200、ok=true、modelReady=true 和 activeModel.id/version。新模型准备时旧模型继续工作，失败保持旧模型，成功切流后旧请求处理完再自动卸载。不存在的模型、版本或 Plan 返回 404；加载失败返回 500 并附带当前状态。加载可能较慢，调试时请适当放宽请求超时。"
+        "description": "首次加载与运行中切换共用此接口。请求 JSON 严格只有 ModelId 和 RequestedModelVersion 两个字段，名称及大小写必须一致。RequestedModelVersion 填查询接口返回的业务版本，例如 2.0.0。加载、校验、预热完成后才返回成功；成功响应严格只有 ok、modelReady、activeModel，activeModel 为 null 或仅含 id/version。检查 HTTP 200、ok=true、modelReady=true 和目标 id/version。参数校验或模型控制失败响应（400/413/415/404/503/500）在这三个字段外仅增加 error、message，ok=false；activeModel/modelReady 仍反映实际活动模型，旧模型可能继续可用。Origin 拦截、HTTP 报文错误或无法读取状态的内部异常使用通用错误结构 ok/error/message。新模型准备时旧模型继续工作，失败保持旧模型，成功切流后旧请求处理完再自动卸载。不存在的模型、版本或 Plan 返回 404，加载失败返回 500。响应不再附带完整状态，无需新增查询参数；张量、统计和诊断信息通过 GET /api/status 获取。加载可能较慢，调试时请适当放宽请求超时。"
       },
       "response": []
     },

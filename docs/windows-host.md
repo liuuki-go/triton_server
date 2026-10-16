@@ -115,7 +115,7 @@ Linux helper 只接受匹配 token、PID 启动时间及命令行的进程；最
 | 接口 | 含义 |
 |---|---|
 | `GET /api/status` | 默认返回完整状态；`?simple=true` 返回简要状态和模型版本目录；不加载模型 |
-| `POST /api/models/select` | 明确指定 ModelId、RequestedModelVersion，首次加载与运行中切换共用此入口 |
+| `POST /api/models/select` | 明确指定 ModelId、RequestedModelVersion，首次加载与切换共用；只返回最小控制结果 |
 | `POST /infer` | 唯一推理入口，multipart `metadata` 和 PNG 文件二进制 `image`；兼容 Raw |
 
 有效的 `GET /api/status` 查询以 HTTP 200 返回状态；200 表示 HTTP 可访问，`modelReady: true` 才表示当前有模型可以推理。非法取值或值不同的重复 `simple` 参数返回 `400 INVALID_QUERY`。上位机不需要独立模型停止接口；切换自动清理旧模型，关闭后端进程仍使用部署工具的 Stop。
@@ -184,11 +184,33 @@ Content-Type: application/json
 {"ModelId":"best","RequestedModelVersion":"2.0.0"}
 ```
 
-选择接口成功时始终返回完整状态 JSON，`activeModel` 指明生效的模型和版本；查询接口的 `simple` 选项不改变此响应。同一个版本已经活动时直接成功。`POST /api/models/select {}` 是错误请求，两个选择字段都必须明确提供，不再恢复上次选择或隐式选择目录第一项。
+选择接口成功时只返回 `ok`、`modelReady`、`activeModel` 三个字段。`activeModel` 为 null 或仅含 `id`、`version`，指明实际生效的模型和版本。例如 HTTP 200：
+
+```json
+{
+  "ok": true,
+  "modelReady": true,
+  "activeModel": {"id": "best", "version": "2.0.0"}
+}
+```
+
+参数校验或模型控制失败（400、413、415、404、503、500）时，在上述三个字段之外仅增加 `error`、`message`，`ok` 为 false。例如请求不存在的版本、当前旧模型仍可用时，HTTP 404 返回：
+
+```json
+{
+  "ok": false,
+  "modelReady": true,
+  "activeModel": {"id": "best", "version": "2.0.0"},
+  "error": "MODEL_VERSION_NOT_FOUND",
+  "message": "未注册指定模型或版本：best/unknown"
+}
+```
+
+`ok: false` 表示这次选择未成功，仍应根据 `modelReady` 和 `activeModel` 判断旧模型是否可以继续推理；尚无活动模型时分别为 false、null。Origin 拦截、HTTP 报文错误或无法读取模型状态的意外内部异常使用通用错误结构 `ok`、`error`、`message`。响应不附带模型目录、张量或执行统计，也无需新增查询参数；详细状态通过既有 `GET /api/status` 查询，其完整与简版行为不变。同一个版本已经活动时直接成功。`POST /api/models/select {}` 是错误请求，两个选择字段都必须明确提供，不再恢复上次选择或隐式选择目录第一项。
 
 切换分为准备、切流和清理：新模型加载、契约校验及预热时，旧模型继续接收和处理推理，`state` 仍为 `running`，`switching: true`，`pendingModel` 为目标。首次加载尚无旧模型时为 `starting`、`modelReady: false`。目标完全准备成功后，服务原子更新 `activeModel`，后续新请求使用新模型；已经接收的旧请求仍按旧模型完成。旧实例在途计数归零后自动后台卸载，完成物理卸载和仓库注销后才从 `retiringModels` 移除，选择请求无需等待旧实例清理。
 
-目标加载失败时不改变旧实例，无需重新加载旧模型。错误响应包含实际 `activeModel`、`modelReady` 和 `lastError`。旧实例的清理错误单独放在 `retiringModels[].cleanupError` 并重试，不把已生效的新模型改判为失败。切换期间需要容纳新旧实例的显存，并可能产生延迟波动；显存不足会返回错误并保持旧模型。
+目标加载失败时不改变旧实例，无需重新加载旧模型。错误响应包含实际 `activeModel`、`modelReady`，以及本次失败的 `error`、`message`；`lastError` 和旧实例的 `retiringModels[].cleanupError` 通过状态查询读取。旧实例清理失败会重试，不把已生效的新模型改判为失败。切换期间需要容纳新旧实例的显存，并可能产生延迟波动；显存不足会返回错误并保持旧模型。
 
 推理 metadata 必须继续携带当前 ModelId、RequestedModelVersion。准备期间仍发送旧模型选择；切流后新提交的旧选择返回 `409 MODEL_NOT_ACTIVE`，已经接收的旧请求不受影响。上位机应在选择成功后更新后续帧的模型字段，并保留各请求原有版本关联。并发提交撞上切流边界时，查询状态确认当前选择，再按业务决定是否重新提交该帧，避免把旧帧任务静默改用其他模型。
 

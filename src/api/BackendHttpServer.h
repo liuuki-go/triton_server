@@ -21,6 +21,7 @@ public:
 private:
     void registerRoutes();
     nlohmann::json status(bool simple = false) const;
+    nlohmann::json selectionStatus() const;
     IBackendService& service_;
     BackendConfig config_;
     httplib::Server server_;
