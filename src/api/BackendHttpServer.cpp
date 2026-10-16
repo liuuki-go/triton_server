@@ -6,6 +6,7 @@
 #include <cmath>
 #include <exception>
 #include <stdexcept>
+#include <utility>
 
 namespace triton_backend
 {
@@ -35,7 +36,7 @@ int BackendHttpServer::bind()
 bool BackendHttpServer::listenAfterBind() { return server_.listen_after_bind(); }
 void BackendHttpServer::stop() { server_.stop(); }
 
-Json BackendHttpServer::status() const
+Json BackendHttpServer::status(bool simple) const
 {
     auto body = service_.status();
     body["schemaVersion"] = config_.server.schemaVersion;
@@ -44,7 +45,32 @@ Json BackendHttpServer::status() const
     body["heartbeatIntervalMs"] = 2000;
     body["pixelFormats"] = {"Mono8", "RGB8Packed", "BGR8Packed"};
     body["imageEncodings"] = {"Png", "Raw"};
-    return body;
+    if (!simple) return body;
+
+    const auto identity = [](const Json& model) -> Json
+    {
+        if (model.is_null()) return nullptr;
+        return {{"id", model.at("id")}, {"version", model.at("version")}};
+    };
+    Json models = Json::array();
+    for (const auto& model : body.at("models"))
+    {
+        Json versions = Json::array();
+        for (const auto& version : model.at("versions"))
+        {
+            versions.push_back({{"version", version.at("version")},
+                                {"available", version.at("available")}});
+        }
+        models.push_back({{"id", model.at("id")}, {"versions", std::move(versions)}});
+    }
+    return {{"ok", body.at("ok")}, {"state", body.at("state")},
+            {"modelReady", body.at("modelReady")},
+            {"activeModel", identity(body.at("activeModel"))},
+            {"models", std::move(models)}, {"switching", body.at("switching")},
+            {"pendingModel", identity(body.at("pendingModel"))},
+            {"lastError", body.at("lastError")}, {"schemaVersion", body.at("schemaVersion")},
+            {"imageEncodings", body.at("imageEncodings")},
+            {"heartbeatIntervalMs", body.at("heartbeatIntervalMs")}};
 }
 
 void BackendHttpServer::registerRoutes()
@@ -88,9 +114,24 @@ void BackendHttpServer::registerRoutes()
         response.set_header("Access-Control-Allow-Headers", "Content-Type");
         response.status = 204;
     });
-    server_.Get("/api/status", [this](const httplib::Request&, httplib::Response& response)
+    server_.Get("/api/status", [this](const httplib::Request& request, httplib::Response& response)
     {
-        sendJson(response, 200, status());
+        bool simple = false;
+        if (request.has_param("simple"))
+        {
+            const auto value = request.get_param_value("simple");
+            const auto values = request.params.equal_range("simple");
+            const bool consistent = std::all_of(values.first, values.second,
+                [&value](const auto& parameter) { return parameter.second == value; });
+            if (!consistent ||
+                (!value.empty() && value != "true" && value != "1" && value != "false" && value != "0"))
+            {
+                sendJson(response, 400, makeError("INVALID_QUERY", "simple 的值须为空、true、1、false 或 0，且重复值须一致"));
+                return;
+            }
+            simple = value.empty() || value == "true" || value == "1";
+        }
+        sendJson(response, 200, status(simple));
     });
     server_.Post("/api/models/select", [this](const httplib::Request& request, httplib::Response& response)
     {

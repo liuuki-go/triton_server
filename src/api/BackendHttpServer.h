@@ -20,7 +20,7 @@ public:
 
 private:
     void registerRoutes();
-    nlohmann::json status() const;
+    nlohmann::json status(bool simple = false) const;
     IBackendService& service_;
     BackendConfig config_;
     httplib::Server server_;

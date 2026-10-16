@@ -95,7 +95,7 @@ bash scripts/wsl/run.sh
 
 ## Windows 上位机接入
 
-上位机负责启动并持有 `wsl.exe` 前台会话，持续读取标准输出和错误输出，避免日志管道阻塞。启动顺序：创建后端进程 → `GET /api/status` 查询状态和所有注册版本 → `POST /api/models/select` 指定 `ModelId` 和 `RequestedModelVersion` → 确认响应的 `modelReady: true` 且 `activeModel` 匹配 → 提交推理。首次加载和运行中切换使用同一个选择接口，HTTP 进程无需重启。
+上位机负责启动并持有 `wsl.exe` 前台会话，持续读取标准输出和错误输出，避免日志管道阻塞。启动顺序：创建后端进程 → `GET /api/status?simple=true` 查询简要状态和所有注册版本 → `POST /api/models/select` 指定 `ModelId` 和 `RequestedModelVersion` → 确认响应的 `modelReady: true` 且 `activeModel` 匹配 → 提交推理。首次加载和运行中切换使用同一个选择接口，HTTP 进程无需重启。
 
 启动后调用 `http://127.0.0.1:6577/infer`。multipart 只有 `metadata` JSON 和 `image` 文件二进制两部分，必须声明 `Content-Length`。上位机使用 PNG 时填写 `ImageEncoding: "Png"`，`image` 上传完整 PNG 文件字节，类型为 `image/png` 或 `application/octet-stream`；无需 Base64，也无需上传原始像素布局。metadata 保留模型、业务版本、相机、帧号、尺寸、源像素格式与可选置信度。
 
@@ -103,11 +103,13 @@ PNG 的 `Width`、`Height` 必须与文件像素尺寸一致，`PixelFormat`、`
 
 | 接口 | 用途 |
 | --- | --- |
-| `GET /api/status` | 合并服务状态、模型版本目录、张量和协议能力、切换及旧模型清理进度；HTTP 200 表示查询成功，`modelReady` 表示可推理 |
+| `GET /api/status` | 默认返回完整状态；`?simple=true` 只返回简要状态、模型版本及文件可用性；有效查询返回 200，`modelReady` 表示可推理 |
 | `POST /api/models/select` | 显式指定 `ModelId`、`RequestedModelVersion`；新模型加载、校验和预热成功后切流，失败保持旧模型 |
 | `POST /infer` | 唯一推理入口 |
 
-Apifox 调试可直接导入 [Postman Collection 文件](docs/triton-back.postman_collection.json)：在「导入」中选择 Postman，上传 JSON，并同时导入、选中同名环境。文件包含以上三个接口和 `best / 2.0.0` 请求示例，默认地址 `http://127.0.0.1:6577`。推理前在 `image` 中选择本地 PNG，将 `metadata` 的 `Width`、`Height` 改为图片实际尺寸，并确认该表单字段的 Content-Type 为 `application/json`。
+状态查询支持 `?simple`、`?simple=true` 或 `?simple=1` 返回简版；不传参数、`?simple=false` 或 `?simple=0` 返回原有完整版。非法取值或值不同的重复 `simple` 参数返回 `400 INVALID_QUERY`，相同值重复按一个值处理。简版字段与示例见 [windows-host.md](docs/windows-host.md)；选择接口的响应始终保持完整。
+
+Apifox 调试可直接导入 [Postman Collection 文件](docs/triton-back.postman_collection.json)：在「导入」中选择 Postman，上传 JSON，并同时导入、选中同名环境。文件包含以上三个接口和 `best / 2.0.0` 请求示例，默认地址 `http://127.0.0.1:6577`，首个请求默认查询简版状态；禁用 `simple` 参数或改为 `false` 可查询完整版。推理前在 `image` 中选择本地 PNG，将 `metadata` 的 `Width`、`Height` 改为图片实际尺寸，并确认该表单字段的 Content-Type 为 `application/json`。
 
 上位机只做等比例缩放；后端负责 letterbox、RGB/NCHW/归一化和坐标还原。返回框位于上传图像坐标系，并回显请求关联字段。详细启动流程与 C# 示例见 [windows-host.md](docs/windows-host.md)。
 

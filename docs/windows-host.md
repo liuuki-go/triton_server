@@ -79,7 +79,7 @@ if (identityProcess.ExitCode != 0)
 using var identity = JsonDocument.Parse(identityJson);
 if (identity.RootElement.GetProperty("process").GetProperty("ownerToken").GetString() != ownerToken)
     throw new InvalidOperationException("端口对应的服务不属于本次启动");
-using var catalogResponse = await http.GetAsync("/api/status", startup.Token);
+using var catalogResponse = await http.GetAsync("/api/status?simple=true", startup.Token);
 catalogResponse.EnsureSuccessStatusCode();
 string catalogJson = await catalogResponse.Content.ReadAsStringAsync();
 // 展示 catalogJson 中的 models[].versions，下面使用用户选择的值。
@@ -114,11 +114,11 @@ Linux helper 只接受匹配 token、PID 启动时间及命令行的进程；最
 
 | 接口 | 含义 |
 |---|---|
-| `GET /api/status` | 一次查询服务状态、所有模型版本、张量及协议能力、当前选择和切换进度；不加载模型 |
+| `GET /api/status` | 默认返回完整状态；`?simple=true` 返回简要状态和模型版本目录；不加载模型 |
 | `POST /api/models/select` | 明确指定 ModelId、RequestedModelVersion，首次加载与运行中切换共用此入口 |
 | `POST /infer` | 唯一推理入口，multipart `metadata` 和 PNG 文件二进制 `image`；兼容 Raw |
 
-`GET /api/status` 始终以 HTTP 200 返回状态；200 表示 HTTP 可访问，`modelReady: true` 才表示当前有模型可以推理。上位机不需要独立模型停止接口；切换自动清理旧模型，关闭后端进程仍使用部署工具的 Stop。
+有效的 `GET /api/status` 查询以 HTTP 200 返回状态；200 表示 HTTP 可访问，`modelReady: true` 才表示当前有模型可以推理。非法取值或值不同的重复 `simple` 参数返回 `400 INVALID_QUERY`。上位机不需要独立模型停止接口；切换自动清理旧模型，关闭后端进程仍使用部署工具的 Stop。
 
 本次接口收敛有兼容性变更：旧 `/health`、`/api/health`、`/api/info`、`/api/models`、`/api/start`、`/api/stop` 路由已移除，调用返回 404。旧查询能力统一读取 `/api/status`，其 `models` 从扁平列表改为按 ID 分组的 `models[].versions`；首次加载也必须向选择接口明确传入两个字段。旧启动脚本输出中的 `readiness.health` 改为 `apiStatus`，上位机需要同步更新。
 
@@ -126,11 +126,40 @@ Linux helper 只接受匹配 token、PID 启动时间及命令行的进程；最
 
 ## 模型版本查询、选择与指定启动
 
+日常展示模型目录可使用 `GET /api/status?simple=true`。`?simple`、`?simple=true`、`?simple=1` 均返回简版；不传 `simple`，或传 `?simple=false`、`?simple=0` 则返回原有完整版。非法取值或值不同的重复参数（例如 `?simple=true&simple=1`）返回 `400 INVALID_QUERY`；相同值重复（例如 `?simple=true&simple=true`）按一个值处理。
+
+简版只包含以下字段；`activeModel`、`pendingModel` 为 null 或仅含 `id`、`version`，每个模型版本仅含 `version`、`available`。`available` 只表示 `model.plan` 文件存在，不表示已加载或通过准确率验证。例如：
+
+```json
+{
+  "ok": true,
+  "state": "running",
+  "modelReady": true,
+  "activeModel": {"id": "best", "version": "2.0.0"},
+  "models": [
+    {"id": "best", "versions": [
+      {"version": "1.0.0", "available": true},
+      {"version": "2.0.0", "available": true},
+      {"version": "3.0.0", "available": true}
+    ]},
+    {"id": "yolo26n", "versions": [
+      {"version": "1.0.0", "available": true}
+    ]}
+  ],
+  "switching": false,
+  "pendingModel": null,
+  "lastError": "",
+  "schemaVersion": "1.0",
+  "imageEncodings": ["Png", "Raw"],
+  "heartbeatIntervalMs": 2000
+}
+```
+
 查询 `GET /api/status`，`models` 按业务模型分组，`versions` 数组包含每个已注册版本的 `version`、`tritonVersion`、`inputSize`、`classCount`、`available`、`active`、`ready`，以及 `inputs`、`outputs` 张量名称、类型和形状。`available` 表示相应 `model.plan` 文件存在，不表示已经通过加载和准确率验证。`activeModel` 为当前接收新请求的模型，首次启动尚未选择时为 null。
 
 当前 `best/2.0.0` 对应动态 batch Engine，固定 960 输入、FP32、禁用 TF32，支持 batch 1–8，最佳构建批量为 4。状态的 `batching` 包含 `maxBatchSize`、`preferredBatchSizes`、`maxQueueDelayMicroseconds`，`instanceCount` 显示 GPU 实例数；默认分别为 8、`[4]`、10000 微秒及 1 个实例。`inputs.shape` 为 `[-1,3,960,960]`，`outputs.shape` 为 `[-1,300,6]`，`-1` 是内部动态批量轴。`batchSize: 1` 表示每个 HTTP 请求仍是一张图，不表示 GPU 每次只执行一张；原 `best/1.0.0` 继续可选。
 
-| 状态字段 | 含义 |
+| 完整响应的状态字段 | 含义 |
 |---|---|
 | `serviceAlive`、`tritonLive` | HTTP 服务与进程内 Triton Core 存活状态 |
 | `state`、`modelReady`、`activeModel` | 运行阶段、能否推理和当前模型版本 |
@@ -155,7 +184,7 @@ Content-Type: application/json
 {"ModelId":"best","RequestedModelVersion":"2.0.0"}
 ```
 
-成功返回与查询接口相同的完整状态 JSON，`activeModel` 指明生效的模型和版本。同一个版本已经活动时直接成功。`POST /api/models/select {}` 是错误请求，两个选择字段都必须明确提供，不再恢复上次选择或隐式选择目录第一项。
+选择接口成功时始终返回完整状态 JSON，`activeModel` 指明生效的模型和版本；查询接口的 `simple` 选项不改变此响应。同一个版本已经活动时直接成功。`POST /api/models/select {}` 是错误请求，两个选择字段都必须明确提供，不再恢复上次选择或隐式选择目录第一项。
 
 切换分为准备、切流和清理：新模型加载、契约校验及预热时，旧模型继续接收和处理推理，`state` 仍为 `running`，`switching: true`，`pendingModel` 为目标。首次加载尚无旧模型时为 `starting`、`modelReady: false`。目标完全准备成功后，服务原子更新 `activeModel`，后续新请求使用新模型；已经接收的旧请求仍按旧模型完成。旧实例在途计数归零后自动后台卸载，完成物理卸载和仓库注销后才从 `retiringModels` 移除，选择请求无需等待旧实例清理。
 

@@ -13,7 +13,7 @@
   ],
   "item": [
     {
-      "name": "01 查询服务状态和模型版本",
+      "name": "01 查询服务状态和模型版本（简版）",
       "request": {
         "method": "GET",
         "header": [
@@ -23,11 +23,18 @@
           }
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/status",
+          "raw": "{{baseUrl}}/api/status?simple=true",
           "host": ["{{baseUrl}}"],
-          "path": ["api", "status"]
+          "path": ["api", "status"],
+          "query": [
+            {
+              "key": "simple",
+              "value": "true",
+              "description": "默认返回简版；禁用此参数或改为 false/0 可返回完整状态。"
+            }
+          ]
         },
-        "description": "查询服务状态及所有已注册模型和业务版本。HTTP 200 只代表查询成功；modelReady=true 才表示已有模型可推理。activeModel 表示当前模型，models 列出可选模型及其版本。switching、pendingModel、retiringModels 表示切换和旧模型清理进度。此接口不加载模型。"
+        "description": "默认 GET /api/status?simple=true 查询简要状态和所有已注册模型版本。简版只含 ok、state、modelReady、activeModel、models、switching、pendingModel、lastError、schemaVersion、imageEncodings、heartbeatIntervalMs；activeModel/pendingModel 为 null 或仅含 id/version，models 的每个版本只含 version/available。available 只表示 model.plan 文件存在。HTTP 200 只代表查询成功，modelReady=true 才表示可推理。若需张量、合批参数、执行统计或旧模型清理进度，请禁用 simple 参数，或改为 simple=false（也支持 0），返回原有完整状态。仅传 ?simple、simple=true、simple=1 均为简版；非法取值或值不同的重复 simple 参数返回 400 INVALID_QUERY，相同值重复按一个值处理。此接口不加载模型；选择接口的响应始终为完整状态。"
       },
       "response": []
     },

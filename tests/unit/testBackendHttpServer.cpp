@@ -37,11 +37,17 @@ public:
         std::lock_guard<std::mutex> lock(mutex);
         return {{"ok", true}, {"serviceAlive", true}, {"state", current ? "running" : "stopped"},
             {"modelReady", current}, {"activeModel", current ? Json{{"id", selected.modelId},
-                {"version", selected.version}} : Json(nullptr)},
+                {"version", selected.version}, {"tritonName", "best"}, {"tritonVersion", 1},
+                {"inputs", Json::array({"images"})}} : Json(nullptr)},
             {"apiVersion", {{"major", 1}, {"minor", 0}}}, {"triton", {{"name", "mock"}}},
-            {"switching", false}, {"pendingModel", nullptr}, {"retiringModels", Json::array()},
-            {"models", Json::array({Json{{"id", "best"}, {"versions", Json::array({
-                Json{{"version", "1.0.0"}}, Json{{"version", "2.0.0"}}})}}})}};
+            {"switching", switching}, {"pendingModel", pendingModel}, {"lastError", lastError},
+            {"retiringModels", Json::array()}, {"inFlight", 3},
+            {"models", Json::array({Json{{"id", "best"}, {"displayName", "Best model"},
+                {"versions", Json::array({
+                    Json{{"version", "1.0.0"}, {"available", true}, {"ready", current},
+                        {"tritonVersion", 1}, {"inputSize", 960}},
+                    Json{{"version", "2.0.0"}, {"available", false}, {"ready", false},
+                        {"tritonVersion", 2}, {"batching", {{"maxBatchSize", 8}}}}})}}})}};
     }
     InferenceResult infer(const InferenceRequest& request, const std::string& modelId,
                           const std::string& version, const std::string& requestId) override
@@ -71,6 +77,9 @@ public:
     std::atomic<int> failure{0};
     mutable std::mutex mutex;
     ModelSelection selected{"best", "1.0.0"};
+    bool switching{false};
+    Json pendingModel = nullptr;
+    std::string lastError;
     InferenceRequest lastRequest;
     std::string lastModelId;
     std::string lastVersion;
@@ -149,6 +158,112 @@ TEST_F(BackendHttpServerTest, StatusCombinesReadinessCatalogAndCapabilitiesWitho
     EXPECT_EQ(service.selectCalls, 0);
 }
 
+TEST_F(BackendHttpServerTest, SimpleStatusReturnsOnlyHostFieldsAndKeepsUnloadedModelsSelectable)
+{
+    const Json expected{{"ok", true}, {"state", "stopped"}, {"modelReady", false},
+        {"activeModel", nullptr}, {"switching", false}, {"pendingModel", nullptr},
+        {"lastError", ""}, {"schemaVersion", "1.0"},
+        {"imageEncodings", Json::array({"Png", "Raw"})}, {"heartbeatIntervalMs", 2000},
+        {"models", Json::array({Json{{"id", "best"}, {"versions", Json::array({
+            Json{{"version", "1.0.0"}, {"available", true}},
+            Json{{"version", "2.0.0"}, {"available", false}}})}}})}};
+    for (const char* query : {"?simple", "?simple=", "?simple=true", "?simple=1",
+        "?simple=true&simple=true", "?simple&simple", "?simple=true&%73imple=true"})
+    {
+        SCOPED_TRACE(query);
+        const auto response = client->Get(std::string("/api/status") + query);
+        ASSERT_TRUE(response);
+        ASSERT_EQ(response->status, 200);
+        EXPECT_EQ(Json::parse(response->body), expected);
+    }
+    EXPECT_EQ(service.selectCalls, 0);
+}
+
+TEST_F(BackendHttpServerTest, SimpleStatusReducesActiveAndPendingModelsToTheirIdentities)
+{
+    {
+        std::lock_guard<std::mutex> lock(service.mutex);
+        service.ready = true;
+        service.switching = true;
+        service.pendingModel = {{"id", "best"}, {"version", "2.0.0"},
+            {"tritonVersion", 2}, {"generation", 7}, {"inputs", Json::array({"images"})}};
+    }
+    const auto response = client->Get("/api/status?simple=true");
+    ASSERT_TRUE(response);
+    ASSERT_EQ(response->status, 200);
+    const auto body = Json::parse(response->body);
+    EXPECT_EQ(body.size(), 11U);
+    EXPECT_EQ(body.at("state"), "running");
+    EXPECT_TRUE(body.at("modelReady"));
+    EXPECT_TRUE(body.at("switching"));
+    EXPECT_EQ(body.at("activeModel"), (Json{{"id", "best"}, {"version", "1.0.0"}}));
+    EXPECT_EQ(body.at("pendingModel"), (Json{{"id", "best"}, {"version", "2.0.0"}}));
+    EXPECT_FALSE(body.contains("inFlight"));
+    EXPECT_FALSE(body.contains("triton"));
+    EXPECT_FALSE(body.contains("retiringModels"));
+}
+
+TEST_F(BackendHttpServerTest, SimpleStatusPreservesLoadErrorAndTheStillReadyActiveModel)
+{
+    {
+        std::lock_guard<std::mutex> lock(service.mutex);
+        service.ready = true;
+        service.lastError = "候选模型加载失败";
+    }
+    const auto response = client->Get("/api/status?simple=1");
+    ASSERT_TRUE(response);
+    ASSERT_EQ(response->status, 200);
+    const auto body = Json::parse(response->body);
+    EXPECT_TRUE(body.at("ok"));
+    EXPECT_TRUE(body.at("modelReady"));
+    EXPECT_EQ(body.at("activeModel"), (Json{{"id", "best"}, {"version", "1.0.0"}}));
+    EXPECT_EQ(body.at("lastError"), "候选模型加载失败");
+    EXPECT_TRUE(body.at("pendingModel").is_null());
+}
+
+TEST_F(BackendHttpServerTest, FullStatusRemainsTheDefaultAndCanBeExplicitlyRequested)
+{
+    const auto response = client->Get("/api/status");
+    ASSERT_TRUE(response);
+    ASSERT_EQ(response->status, 200);
+    auto expected = Json::parse(response->body);
+    ASSERT_TRUE(expected.contains("uptimeMs"));
+    ASSERT_TRUE(expected.contains("pixelFormats"));
+    ASSERT_TRUE(expected.contains("triton"));
+    ASSERT_TRUE(expected.contains("apiVersion"));
+    ASSERT_TRUE(expected.at("models")[0].at("versions")[0].contains("tritonVersion"));
+    expected.erase("uptimeMs");
+    for (const char* query : {"?simple=false", "?simple=0"})
+    {
+        SCOPED_TRACE(query);
+        const auto full = client->Get(std::string("/api/status") + query);
+        ASSERT_TRUE(full);
+        ASSERT_EQ(full->status, 200);
+        auto body = Json::parse(full->body);
+        ASSERT_TRUE(body.contains("uptimeMs"));
+        body.erase("uptimeMs");
+        EXPECT_EQ(body, expected);
+    }
+}
+
+TEST_F(BackendHttpServerTest, StatusRejectsInvalidOrConflictingSimpleParametersWithoutLoadingModels)
+{
+    for (const char* query : {"?simple=yes", "?simple=2", "?simple=TRUE", "?simple=False",
+        "?simple=0&simple=1", "?simple&simple=false", "?simple=true&simple=1"})
+    {
+        SCOPED_TRACE(query);
+        const auto response = client->Get(std::string("/api/status") + query);
+        ASSERT_TRUE(response);
+        ASSERT_EQ(response->status, 400);
+        const auto body = Json::parse(response->body);
+        EXPECT_FALSE(body.at("ok"));
+        EXPECT_EQ(body.at("error"), "INVALID_QUERY");
+        EXPECT_TRUE(body.at("message").is_string());
+        EXPECT_FALSE(body.at("message").get<std::string>().empty());
+    }
+    EXPECT_EQ(service.selectCalls, 0);
+}
+
 TEST_F(BackendHttpServerTest, RemovedRoutesReturnNotFoundAndCannotControlModels)
 {
     for (const char* route : {"/health", "/api/health", "/api/info", "/api/models"})
@@ -180,6 +295,10 @@ TEST_F(BackendHttpServerTest, OneSelectionRouteLoadsInitiallyAndSwitchesToAnothe
         EXPECT_EQ(body.at("activeModel").at("version"), version);
         EXPECT_TRUE(body.at("modelReady"));
         EXPECT_TRUE(body.contains("imageEncodings"));
+        EXPECT_TRUE(body.contains("serviceAlive"));
+        EXPECT_TRUE(body.contains("triton"));
+        EXPECT_TRUE(body.contains("pixelFormats"));
+        EXPECT_TRUE(body.at("activeModel").contains("tritonVersion"));
         EXPECT_EQ(body.at("models")[0].at("versions").size(), 2U);
     }
     EXPECT_EQ(service.selectCalls, 2);
