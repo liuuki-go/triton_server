@@ -1,0 +1,28 @@
+{
+  "fixtures": [
+    {
+      "modelId": "best",
+      "width": 800,
+      "height": 800,
+      "pixelFormat": "BGR8Packed",
+      "strideBytes": 2400,
+      "rowOrder": "TopDown",
+      "rawFile": "best.raw",
+      "bytes": 1920000,
+      "sha256": "e161f85ba0eabfeebf41cbac492e298a0929d3db6c19a3e2d04d1d99a378151b",
+      "sourceImageName": "BIN002_1750600565_500_NG_151_120.000000_20250918173303_plain.bmp"
+    },
+    {
+      "modelId": "yolo26n",
+      "width": 640,
+      "height": 480,
+      "pixelFormat": "BGR8Packed",
+      "strideBytes": 1920,
+      "rowOrder": "TopDown",
+      "rawFile": "yolo26n.raw",
+      "bytes": 921600,
+      "sha256": "3ce6511a74a7ab4441ce9e7687a26c6a4ec47c3600631742acf80d8ef1e4a4f6",
+      "sourceImageName": "000000000009.jpg"
+    }
+  ]
+}

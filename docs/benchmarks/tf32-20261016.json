@@ -1,0 +1,334 @@
+{
+  "schemaVersion": 1,
+  "testDate": "2026-10-16",
+  "benchmarkComplete": true,
+  "transportAndStatisticsPassed": true,
+  "strictFp32ParityPassed": false,
+  "models": {
+    "fp32": {
+      "id": "best",
+      "businessVersion": "2.0.0",
+      "tritonVersion": 2,
+      "sha256": "78ab34c4696ed36c195559fba12833421b0d41f672637e7c15f3611b6e676280"
+    },
+    "tf32": {
+      "id": "best",
+      "businessVersion": "3.0.0",
+      "tritonVersion": 3,
+      "sha256": "f74a3096b6b3fa26de53a9b36658cc2eb3f577ba32990a9bde79302e07eff7d4",
+      "inputOutputType": "FP32",
+      "tf32Allowed": true,
+      "tacticsNamedTf32": 110
+    }
+  },
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 5060 Laptop GPU, 610.88, 8151 MiB",
+    "tensorRTVersion": "11.1.0.106",
+    "tritonVersion": "2.71.0",
+    "cudaVersion": "13.3.1",
+    "onnxSha256": "83998d5c264b38789a494d578626998cc5d8b351f78927a93c2cf11af10a8375"
+  },
+  "build": {
+    "batchProfile": {
+      "min": [
+        1,
+        3,
+        960,
+        960
+      ],
+      "opt": [
+        4,
+        3,
+        960,
+        960
+      ],
+      "max": [
+        8,
+        3,
+        960,
+        960
+      ]
+    },
+    "workspaceMiB": 1024,
+    "tf32": "Allowed by default; no --noTF32; selected TF32 tactics confirmed with Engine Inspector",
+    "fp16Conversion": false,
+    "seconds": 50.16611212799944,
+    "engineBytes": 13897676
+  },
+  "workload": {
+    "distinctImages": 377,
+    "sourceTypes": {
+      "BMP": 351,
+      "JPG": 26
+    },
+    "transport": "Full-resolution PNG, one image per multipart metadata + image request",
+    "timingInput": "All PNG bytes preloaded; dataset preparation excluded",
+    "fourCameras": "4 simultaneous requests; next round waits for all 4 responses",
+    "repeats": 3,
+    "minimumSecondsPerTrial": 15,
+    "fullDatasetRequiredPerTrial": true,
+    "warmupMinimumSeconds": 10,
+    "warmupFullDatasetRequired": true,
+    "throughput": "Successful completed images / wall time including final drain; median across repeats",
+    "p95": "Pooled HTTP response latency samples across all repeats",
+    "maxBatchSize": 8,
+    "preferredBatchSizes": [
+      4
+    ],
+    "maxQueueDelayMicroseconds": 10000,
+    "instanceCount": 1
+  },
+  "results": {
+    "fp32-sync4": {
+      "fpsMedian": 25.398222094107645,
+      "fpsRange": [
+        24.691015517469875,
+        25.859089999843484
+      ],
+      "fourImageRoundsPerSecond": 6.349555523526911,
+      "pooledClientP95Ms": 169.47700105019976,
+      "successfulImages": 1152,
+      "failedRequests": 0,
+      "batchExecutions": {
+        "4": 286,
+        "1": 2,
+        "3": 2
+      },
+      "meanActualBatchSize": 3.972413793103448,
+      "batch4ImageFraction": 0.9930555555555556,
+      "strictComparisonPassed": true,
+      "stagesMsMean": {
+        "preprocess": 13.705835860243056,
+        "tritonRequest": 135.33647541840276,
+        "postprocess": 0.0034379609375,
+        "total": 149.05485222743056
+      }
+    },
+    "tf32-sync4": {
+      "fpsMedian": 28.04830456467671,
+      "fpsRange": [
+        27.125598458233895,
+        28.565894175038697
+      ],
+      "fourImageRoundsPerSecond": 7.012076141169177,
+      "pooledClientP95Ms": 176.7116121500294,
+      "successfulImages": 1264,
+      "failedRequests": 0,
+      "batchExecutions": {
+        "4": 314,
+        "1": 1,
+        "2": 2,
+        "3": 1
+      },
+      "meanActualBatchSize": 3.9748427672955975,
+      "batch4ImageFraction": 0.9936708860759493,
+      "strictComparisonPassed": false,
+      "stagesMsMean": {
+        "preprocess": 14.694051772151898,
+        "tritonRequest": 119.29093479113924,
+        "postprocess": 0.0033948101265822784,
+        "total": 133.99883501740507
+      }
+    },
+    "windows-fp32-sync4": {
+      "fpsMedian": 25.328163010991073,
+      "fpsRange": [
+        24.53564610982737,
+        26.119633063394197
+      ],
+      "fourImageRoundsPerSecond": 6.332040752747768,
+      "pooledClientP95Ms": 182.23457999883985,
+      "successfulImages": 1152,
+      "failedRequests": 0,
+      "batchExecutions": {
+        "1": 61,
+        "2": 34,
+        "3": 49,
+        "4": 219
+      },
+      "meanActualBatchSize": 3.1735537190082646,
+      "batch4ImageFraction": 0.7604166666666666,
+      "strictComparisonPassed": true,
+      "stagesMsMean": {
+        "preprocess": 13.5219147734375,
+        "tritonRequest": 129.19108989322916,
+        "postprocess": 0.003241912326388889,
+        "total": 142.7260062699653
+      }
+    },
+    "windows-tf32-sync4": {
+      "fpsMedian": 29.046726476231647,
+      "fpsRange": [
+        27.301066587064565,
+        29.291909301035375
+      ],
+      "fourImageRoundsPerSecond": 7.261681619057912,
+      "pooledClientP95Ms": 156.74208500222446,
+      "successfulImages": 1288,
+      "failedRequests": 0,
+      "batchExecutions": {
+        "1": 62,
+        "2": 38,
+        "3": 54,
+        "4": 247
+      },
+      "meanActualBatchSize": 3.2119700748129674,
+      "batch4ImageFraction": 0.7670807453416149,
+      "strictComparisonPassed": false,
+      "stagesMsMean": {
+        "preprocess": 13.665557227484472,
+        "tritonRequest": 113.21785682996894,
+        "postprocess": 0.00313410248447205,
+        "total": 126.89599220419255
+      }
+    }
+  },
+  "throughputImprovementPercent": {
+    "native": 10.434125903576064,
+    "windows": 14.681536373667981
+  },
+  "numericalComparison": {
+    "strictTolerances": {
+      "confidenceAbsolute": 1e-05,
+      "boxCoordinateAbsolutePixels": 0.001,
+      "detectionCountAndClassDistributionMustMatch": true
+    },
+    "matchingAlgorithm": {
+      "name": "per-class square Hungarian maximum-total-IoU assignment",
+      "minimumCorrespondenceIoU": 0.5,
+      "structuralChangePolicy": "Count or class-distribution changes are separate failures; these images are not force-matched.",
+      "numericPopulation": "All geometrically corresponding same-class assigned pairs, including every strict numerical failure; no numerical-tolerance filtering.",
+      "ordering": "Image indices and PNG identity must match; detector output row ordering does not need to match."
+    },
+    "summary": {
+      "imageCount": 377,
+      "strictPassedImages": 3,
+      "strictFailedImages": 374,
+      "strictPassedImagesWithDetections": 0,
+      "strictPassedImagesWithNoDetections": 3,
+      "detectionCountChangedImages": 5,
+      "classDistributionChangedImages": 5,
+      "correspondenceFailedImages": 0,
+      "outputOrderChangedImages": 2,
+      "referenceDetectionCount": 869,
+      "candidateDetectionCount": 872,
+      "matchedDetectionPairs": 852,
+      "structurallyChangedImagesExcludedFromNumericMatching": 5,
+      "numericMatchingEligibleImages": 372,
+      "referenceDetectionsOnStructurallyChangedImages": 17,
+      "candidateDetectionsOnStructurallyChangedImages": 20
+    },
+    "distributions": {
+      "confidenceAbsoluteDifference": {
+        "count": 852,
+        "minimum": 1.1920928955078125e-07,
+        "mean": 0.002284205120773942,
+        "p50": 0.000670701265335083,
+        "p95": 0.010296593606472008,
+        "p99": 0.01823742091655732,
+        "maximum": 0.08845251798629761
+      },
+      "maximumBoxCoordinateAbsoluteDifferencePerPair": {
+        "count": 852,
+        "minimum": 0.00091552734375,
+        "mean": 0.13691903112080175,
+        "p50": 0.012298583984375,
+        "p95": 0.3680831909179687,
+        "p99": 2.064196777343751,
+        "maximum": 10.29974365234375
+      },
+      "allBoxCoordinateAbsoluteDifferences": {
+        "count": 3408,
+        "minimum": 0.0,
+        "mean": 0.050780315616740866,
+        "p50": 0.004638671875,
+        "p95": 0.10283966064453093,
+        "p99": 0.7562097167968738,
+        "maximum": 10.29974365234375
+      },
+      "matchingIoU": {
+        "count": 852,
+        "minimum": 0.9078628398637534,
+        "mean": 0.998363705921279,
+        "p50": 0.9992048595505705,
+        "p95": 0.99973890068808,
+        "p99": 0.9998334553471508,
+        "maximum": 0.9999418265302158
+      },
+      "worstConfidencePair": {
+        "classId": 9,
+        "referenceIndex": 1,
+        "candidateIndex": 1,
+        "iou": 0.9892426326972221,
+        "referenceConfidence": 0.808097779750824,
+        "candidateConfidence": 0.7196452617645264,
+        "confidenceSignedDifference": -0.08845251798629761,
+        "confidenceAbsoluteDifference": 0.08845251798629761,
+        "boxSignedDifferences": {
+          "x1": 1.402099609375,
+          "y1": 0.0526123046875,
+          "x2": 0.1033935546875,
+          "y2": -0.037872314453125
+        },
+        "maxBoxCoordinateAbsoluteDifference": 1.402099609375,
+        "strictPassed": false,
+        "imageIndex": 130,
+        "pngRelativePath": "images/BIN110_1750609429_509_NG_168_120.000000_20250916082139_plain.bmp.png"
+      },
+      "worstBoxCoordinatePair": {
+        "classId": 7,
+        "referenceIndex": 0,
+        "candidateIndex": 0,
+        "iou": 0.9566604669612851,
+        "referenceConfidence": 0.9507898688316345,
+        "candidateConfidence": 0.9521068930625916,
+        "confidenceSignedDifference": 0.0013170242309570312,
+        "confidenceAbsoluteDifference": 0.0013170242309570312,
+        "boxSignedDifferences": {
+          "x1": 1.579336166381836,
+          "y1": -3.97705078125,
+          "x2": 6.52362060546875,
+          "y2": 10.29974365234375
+        },
+        "maxBoxCoordinateAbsoluteDifference": 10.29974365234375,
+        "strictPassed": false,
+        "imageIndex": 27,
+        "pngRelativePath": "images/BIN002_1750600965_500_NG_162_120.000000_20250918174225_plain.bmp.png"
+      }
+    },
+    "baselineSha256": {
+      "fp32": "a053f8072696eb9cded5b7301af985bd730724f0fe8daa7debf888a2392686c3",
+      "tf32": "32cab6287cc991bc3fdb3f0e49d31e8e2add668151b38084658b03fc461b38a4"
+    }
+  },
+  "limits": [
+    "FP32 parity failed and is not treated as an HTTP failure.",
+    "TF32 is an optional selectable version; FP32 versions are retained.",
+    "No labeled ground truth: this is numerical drift analysis, not an accuracy evaluation.",
+    "Numeric maxima exclude 5 structurally changed images; these are separate failures, not repaired matches.",
+    "Timing tritonRequest includes backend queueing, copies, execution and callback waiting.",
+    "These measurements apply to this GPU, environment, dataset and workload."
+  ],
+  "localEvidenceDirectory": "build/tf32-batch-20261016",
+  "benchmarkTool": "tests/benchmark/benchmark_dynamic_batch.py",
+  "regressionValidation": {
+    "cppUnitTestsPassed": 34,
+    "gpuIntegrationTestsPassed": 7,
+    "deploymentToolsTestsPassed": 24,
+    "businessReferenceUnitTestsPassed": 5,
+    "httpProtocolTestsPassed": 17,
+    "businessVersions": {
+      "best": [
+        "1.0.0",
+        "2.0.0",
+        "3.0.0"
+      ],
+      "yolo26n": [
+        "1.0.0"
+      ]
+    },
+    "buildWithoutInitialRuntimeDirectoryPassed": true,
+    "windowsStartupBest3ModelReady": true,
+    "scope": "TF32 functional references pass; old FP32 parity is explicitly false and remains reported separately."
+  }
+}

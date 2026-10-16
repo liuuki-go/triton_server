@@ -1,0 +1,22 @@
+server:
+  host: "127.0.0.1"
+  port: 6577
+  schemaVersion: "1.0"
+  workerCount: 16
+  queueCapacity: 8
+  maxRequestBodyBytes: 67108864
+  maxMetadataBytes: 16384
+  readTimeoutSeconds: 10
+  writeTimeoutSeconds: 30
+  allowedOrigins:
+    - "http://127.0.0.1:8090"
+    - "http://localhost:8090"
+
+triton:
+  root: "/opt/triton/2.71.0"
+  repository: "../models"
+  modelConfigPath: "models.json"
+  maxInFlight: 8
+  stopTimeoutSeconds: 30
+
+autoStart: false

@@ -1,0 +1,85 @@
+{
+  "reference": "Direct TensorRT baseline with identical engine and raw pixels",
+  "confidenceTolerance": 1E-05,
+  "coordinateTolerance": 0.001,
+  "models": {
+    "best": {
+      "rawSha256": "e161f85ba0eabfeebf41cbac492e298a0929d3db6c19a3e2d04d1d99a378151b",
+      "detectionCount": 2,
+      "detections": [
+        {
+          "box": {
+            "x1": 190.44822692871094,
+            "x2": 218.66575622558594,
+            "y1": 527.59912109375,
+            "y2": 544.1796875
+          },
+          "classId": 15,
+          "className": "scratch",
+          "confidence": 0.9604227542877197
+        },
+        {
+          "box": {
+            "x1": 9.746513366699219,
+            "x2": 100.81266784667969,
+            "y1": 558.3560791015625,
+            "y2": 577.943115234375
+          },
+          "classId": 15,
+          "className": "scratch",
+          "confidence": 0.860529363155365
+        }
+      ]
+    },
+    "yolo26n": {
+      "rawSha256": "3ce6511a74a7ab4441ce9e7687a26c6a4ec47c3600631742acf80d8ef1e4a4f6",
+      "detectionCount": 4,
+      "detections": [
+        {
+          "box": {
+            "x1": 310.59918212890625,
+            "x2": 631.0567016601562,
+            "y1": 0.38249969482421875,
+            "y2": 240.35238647460938
+          },
+          "classId": 45,
+          "className": "bowl",
+          "confidence": 0.930226743221283
+        },
+        {
+          "box": {
+            "x1": 259.3318176269531,
+            "x2": 570.7581787109375,
+            "y1": 234.59814453125,
+            "y2": 476.6099853515625
+          },
+          "classId": 50,
+          "className": "broccoli",
+          "confidence": 0.7875410318374634
+        },
+        {
+          "box": {
+            "x1": 0.0,
+            "x2": 609.8621826171875,
+            "y1": 187.87661743164062,
+            "y2": 478.55462646484375
+          },
+          "classId": 45,
+          "className": "bowl",
+          "confidence": 0.7875168919563293
+        },
+        {
+          "box": {
+            "x1": 0.6314697265625,
+            "x2": 439.7070617675781,
+            "y1": 11.920867919921875,
+            "y2": 366.3946533203125
+          },
+          "classId": 45,
+          "className": "bowl",
+          "confidence": 0.6863234043121338
+        }
+      ]
+    }
+  }
+}

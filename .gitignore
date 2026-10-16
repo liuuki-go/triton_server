@@ -1,0 +1,6 @@
+/build/
+/bin/
+/runtime/
+__pycache__/
+*.pyc
+/docs/system_env_info.txt

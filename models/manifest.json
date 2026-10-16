@@ -1,0 +1,58 @@
+{
+  "models": [
+    {
+      "id": "best",
+      "tritonVersion": 1,
+      "enginePath": "models/best/1/model.plan",
+      "sha256": "ffe595febf4e9787a04cfc07d030499adaa1fa7c1b1d5693a289d1e8e305faac",
+      "onnxPath": "model_sources/best.onnx",
+      "onnxSha256": "83998d5c264b38789a494d578626998cc5d8b351f78927a93c2cf11af10a8375"
+    },
+    {
+      "id": "yolo26n",
+      "tritonVersion": 1,
+      "enginePath": "models/yolo26n/1/model.plan",
+      "sha256": "b6d0f9b9c0e3040e8ef3ff9d042bba4eff1248f9edae1d572366adfc7aab53d6",
+      "onnxPath": "model_sources/yolo26n.onnx",
+      "onnxSha256": "8a54e9275ef31d41ff93df65b616e2b5f13db5c21d8bc1a3a6d0158f9b9fad5a"
+    },
+    {
+      "id": "best",
+      "tritonVersion": 2,
+      "enginePath": "models/best/2/model.plan",
+      "sha256": "78ab34c4696ed36c195559fba12833421b0d41f672637e7c15f3611b6e676280",
+      "onnxPath": "model_sources/best.onnx",
+      "onnxSha256": "83998d5c264b38789a494d578626998cc5d8b351f78927a93c2cf11af10a8375",
+      "build": {
+        "minShapes": "images:1x3x960x960",
+        "optShapes": "images:4x3x960x960",
+        "maxShapes": "images:8x3x960x960",
+        "precision": "FP32",
+        "tf32": false,
+        "tensorRTVersion": "11.1.0.106"
+      }
+    },
+    {
+      "id": "best",
+      "tritonVersion": 3,
+      "enginePath": "models/best/3/model.plan",
+      "sha256": "f74a3096b6b3fa26de53a9b36658cc2eb3f577ba32990a9bde79302e07eff7d4",
+      "onnxPath": "model_sources/best.onnx",
+      "onnxSha256": "83998d5c264b38789a494d578626998cc5d8b351f78927a93c2cf11af10a8375",
+      "build": {
+        "minShapes": "images:1x3x960x960",
+        "optShapes": "images:4x3x960x960",
+        "maxShapes": "images:8x3x960x960",
+        "precision": "FP32 I/O; TF32 allowed, mixed with FP32 tactics",
+        "tf32": true,
+        "tensorRTVersion": "11.1.0.106"
+      },
+      "validation": {
+        "strictFp32Parity": false,
+        "note": "TF32 is an optional approximate-numerics version, not a bitwise FP32 replacement.",
+        "benchmarkReport": "docs/benchmarks/tf32-20261016.json"
+      }
+    }
+  ],
+  "engineCompatibility": "Validated with TensorRT 11.1.0.106 and RTX 5060 Laptop GPU; verify on another GPU or TensorRT version."
+}
