@@ -9,6 +9,7 @@
 | 目录 | 职责 |
 | --- | --- |
 | `src/app/` | 程序入口、配置选择、对象装配、进程信号处理 |
+| `src/run.sh` | Linux/WSL 研发启动：自动增量构建、前台运行 |
 | `src/api/` | HTTP 路由、multipart/metadata 校验、JSON 编解码、HTTP 任务队列 |
 | `src/services/` | `IBackendService` 服务契约、模型与运行参数类型 |
 | `src/services/impl/` | Triton C API 实现、模型生命周期、推理请求所有权和背压 |
@@ -52,6 +53,20 @@ bash scripts/wsl/build.sh 4
 ```
 
 仓库包含源码、配置、正式 Plan、ONNX、测试及文档；`runtime/`、`build/`、`bin/`、Python 缓存和本机环境状态快照不入库。构建会创建需要的运行目录和可执行文件；Triton、CUDA、TensorRT 系统运行库需要事先配置。
+
+研发人员在 Linux/WSL 终端进入项目后可直接启动：
+
+```bash
+bash src/run.sh
+# 启动时加载 best 的业务版本 2.0.0
+bash src/run.sh --model-id best --model-version 2.0.0
+# 性能测量使用 Release
+bash src/run.sh --release --model-id best --model-version 2.0.0
+```
+
+该入口自动增量编译服务，默认 Debug、4 个编译任务，分别使用 `build/dev-debug`、`build/dev-release`；日志直接显示在终端，Ctrl+C 正常停止。默认读取 `config/server.yaml`，当前 `autoStart: false`，所以零参数只启动 HTTP，之后可调用选择接口加载模型。模型参数均可省略，提供时 ID 和业务版本需成对。可选 `--config FILE`、`--jobs N`，完整用法见 `bash src/run.sh --help`。也可进入 `src` 后运行 `./run.sh`，或从其他工作目录使用脚本的完整路径。
+
+`src/app/main.cpp` 中的 `main()` 是 C++ 服务入口，由 CMake 编译成可执行程序；`src/run.sh` 负责构建并直接运行它。此研发入口按脚本位置查找可写项目目录，不要求固定 `/opt/triton_back` 或使用 Windows 管理工具。运行仍需要已安装项目依赖；`TRITON_ROOT` 环境变量应与 YAML 的 `triton.root` 一致，默认 `/opt/triton/2.71.0`。
 
 在 Windows PowerShell 中执行：
 
@@ -135,6 +150,7 @@ ctest --test-dir build -L unit --no-tests=error --output-on-failure
 ctest --test-dir build -L gpu --no-tests=error --output-on-failure
 python3 tests/integration/test_business.py
 python3 tests/integration/test_business_reference.py
+python3 tests/scripts/test_run.py
 python3 tests/protocol/testProtocol.py --output build/verification/protocol-report.json
 python3 tools/environment/collect_environment.py --output /root/system_env_info.txt --copy-to docs/system_env_info.txt
 ```

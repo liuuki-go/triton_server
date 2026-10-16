@@ -45,6 +45,34 @@ bash scripts/wsl/run.sh
 
 run.sh 在前台运行 C++，显式加载 `/opt/triton_back/config/server.yaml`。默认 `autoStart: false`，未指定模型时只开放 HTTP。查询 `GET /api/status` 获取所有模型和版本，再通过 `POST /api/models/select` 明确加载目标。Windows 的 Start 未提供模型参数时也只等待 HTTP 可查询；提供 `-ModelId best -ModelVersion 1.0.0` 时会选择目标并核对返回的 `modelReady` 和 `activeModel`。
 
+## Linux/WSL 研发快速启动
+
+源码入口是 `src/app/main.cpp` 中的 `main()`。研发启动脚本位于 `src/run.sh`，会通过项目根 CMake 构建 `triton_backend`，然后直接 `exec` 可执行程序；日志继承当前终端，Ctrl+C 走服务正常退出流程。
+
+```bash
+cd /opt/triton_back/src
+./run.sh
+./run.sh --model-id best --model-version 2.0.0
+./run.sh --release --model-id best --model-version 2.0.0
+./run.sh --help
+```
+
+不需要必传命令行参数。默认配置为项目 `config/server.yaml`，当前 `autoStart=false`，零参数只开放 HTTP，之后通过选择接口加载模型。指定模型时同时提供 `--model-id` 和 `--model-version`；版本是 `2.0.0` 这样的业务版本。`--config FILE` 更换配置文件，`--jobs N` 指定 1–16 个编译任务，默认 4。
+
+Debug、Release 分别增量构建到 `build/dev-debug` 和 `build/dev-release`，只构建服务目标，不自动运行测试。压测使用 `--release`。需要 GDB 断点时，可在脚本完成 Debug 构建后运行：
+
+```bash
+cd /opt/triton_back
+source /opt/triton/2.71.0/setup_env.sh
+gdb --args build/dev-debug/bin/triton_backend \
+  --config /opt/triton_back/config/server.yaml \
+  --model-id best --model-version 2.0.0
+```
+
+脚本不限制项目路径，也不执行 `sudo`；开发者需要对 checkout 和构建目录有写权限，并安装 CMake、Ninja、编译器和项目运行库。默认 `TRITON_ROOT=/opt/triton/2.71.0`，可用环境变量指定其他已配置的 Triton 根目录；它影响 CMake 和动态库搜索，YAML 中运行时使用的 `triton.root` 需要同步配置。`CUDA_HOME` 可指定 CUDA 根目录，默认 `/usr/local/cuda-13.3`。
+
+默认配置按脚本所在项目定位；自定义 `--config` 的相对路径以调用者终端目录为准。YAML 内的模型仓库、模型注册文件等相对路径仍相对该 YAML 文件目录解析。该入口直接运行当前编译结果，已有 `scripts/wsl/run.sh` 继续用于部署生命周期管理。
+
 ## 运行文件和记录
 
 | 路径 | 作用 |
