@@ -1,0 +1,105 @@
+{
+  "info": {
+    "name": "Triton Back 三个对外接口",
+    "description": "可直接导入 Apifox 的 Postman Collection v2.1。默认服务地址 http://127.0.0.1:6577。按 01 查询、02 选择模型、03 推理的顺序调试。选择成功须确认 modelReady=true 且 activeModel 的 id/version 匹配；选择失败时旧模型可能仍然可用。推理示例使用 best 的业务版本 2.0.0（不是目录编号 2）。导入时同时勾选同名环境，调试时选中该环境。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:6577",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 查询服务状态和模型版本",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "status"]
+        },
+        "description": "查询服务状态及所有已注册模型和业务版本。HTTP 200 只代表查询成功；modelReady=true 才表示已有模型可推理。activeModel 表示当前模型，models 列出可选模型及其版本。switching、pendingModel、retiringModels 表示切换和旧模型清理进度。此接口不加载模型。"
+      },
+      "response": []
+    },
+    {
+      "name": "02 选择或切换当前模型",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ModelId\": \"best\",\n  \"RequestedModelVersion\": \"2.0.0\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/models/select",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "models", "select"]
+        },
+        "description": "首次加载与运行中切换共用此接口。请求 JSON 严格只有 ModelId 和 RequestedModelVersion 两个字段，名称及大小写必须一致。RequestedModelVersion 填查询接口返回的业务版本，例如 2.0.0。加载、校验、预热完成后才返回成功；检查 HTTP 200、ok=true、modelReady=true 和 activeModel.id/version。新模型准备时旧模型继续工作，失败保持旧模型，成功切流后旧请求处理完再自动卸载。不存在的模型、版本或 Plan 返回 404；加载失败返回 500 并附带当前状态。加载可能较慢，调试时请适当放宽请求超时。"
+      },
+      "response": []
+    },
+    {
+      "name": "03 上传 PNG 进行推理",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "metadata",
+              "type": "text",
+              "contentType": "application/json",
+              "description": "JSON 原文，单独一个表单字段，Content-Type 必须是 application/json。Width/Height 填 PNG 实际像素尺寸。ModelId/RequestedModelVersion 必须匹配当前模型。ConfidenceThreshold 可选，范围 0 到 1，默认 0.25。其余 13 个字段必填；CapturedAtUtc 使用 UTC 时间；Sequence/FrameId 为非负整数。SourcePixelFormat 记录相机源像素格式。PNG 不需要 PixelFormat、StrideBytes、RowOrder。",
+              "value": "{\n  \"SchemaVersion\": \"1.0\",\n  \"RequestId\": \"apifox-0001\",\n  \"Sequence\": 1,\n  \"FrameId\": 1,\n  \"CameraId\": \"camera-1\",\n  \"ChannelId\": \"channel-1\",\n  \"CapturedAtUtc\": \"2026-10-16T08:00:00Z\",\n  \"Width\": 800,\n  \"Height\": 800,\n  \"SourcePixelFormat\": \"BGR8Packed\",\n  \"ImageEncoding\": \"Png\",\n  \"ModelId\": \"best\",\n  \"RequestedModelVersion\": \"2.0.0\",\n  \"ConfidenceThreshold\": 0.25\n}"
+            },
+            {
+              "key": "image",
+              "type": "file",
+              "contentType": "image/png",
+              "description": "导入后选择一张本地 PNG。上传完整文件二进制，不填文件路径文本或 Base64。示例 metadata 为 800×800，请按实际图片修改 Width/Height。",
+              "src": []
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/infer",
+          "host": ["{{baseUrl}}"],
+          "path": ["infer"]
+        },
+        "description": "每次请求一张 PNG，使用 multipart/form-data，恰好包含 metadata 和 image 两部分。metadata 是 JSON 原文（不要再用引号包裹整个 JSON），该部分 Content-Type=application/json；image 是文件，Content-Type=image/png。让客户端自动生成整体 Content-Type/boundary 和 Content-Length，不手填这些请求头，不使用 chunked。导入后检查两个字段各自的 Content-Type。Width/Height 必须与上传 PNG 实际尺寸一致，不是模型输入尺寸。支持 8 位灰度、彩色及带透明通道 PNG（忽略透明度）。推理不会自动切换模型；请求中的模型及版本须与 activeModel 一致。成功返回 detections、detectionCount、appliedConfidenceThreshold、timingsMs 以及请求关联字段；检测框坐标对应上传图像。未加载模型返回 503 BACKEND_NOT_READY；当前模型不匹配返回 409 MODEL_NOT_ACTIVE。"
+      },
+      "response": []
+    }
+  ]
+}

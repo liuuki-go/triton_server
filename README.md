@@ -107,6 +107,8 @@ PNG 的 `Width`、`Height` 必须与文件像素尺寸一致，`PixelFormat`、`
 | `POST /api/models/select` | 显式指定 `ModelId`、`RequestedModelVersion`；新模型加载、校验和预热成功后切流，失败保持旧模型 |
 | `POST /infer` | 唯一推理入口 |
 
+Apifox 调试可直接导入 [Postman Collection 文件](docs/triton-back.postman_collection.json)：在「导入」中选择 Postman，上传 JSON，并同时导入、选中同名环境。文件包含以上三个接口和 `best / 2.0.0` 请求示例，默认地址 `http://127.0.0.1:6577`。推理前在 `image` 中选择本地 PNG，将 `metadata` 的 `Width`、`Height` 改为图片实际尺寸，并确认该表单字段的 Content-Type 为 `application/json`。
+
 上位机只做等比例缩放；后端负责 letterbox、RGB/NCHW/归一化和坐标还原。返回框位于上传图像坐标系，并回显请求关联字段。详细启动流程与 C# 示例见 [windows-host.md](docs/windows-host.md)。
 
 结束整个进程使用：
