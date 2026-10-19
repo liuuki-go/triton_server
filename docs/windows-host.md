@@ -1,8 +1,8 @@
 # Windows 上位机启动推理后端
 
-推荐上位机启动并保留一个前台 `wsl.exe` 进程，由 WSL 的 `run.sh` 最终 exec C++ 服务。HTTP 通信地址默认 `http://127.0.0.1:6577`。运行时无需 Windows Python、旧 Python 控制服务或 D 盘源码；更新与构建是单独的部署动作。
+推荐上位机启动并保留一个前台 `wsl.exe` 进程，由 WSL 的 `run.sh` 最终 exec C++ 服务。本机 HTTP 通信地址为 `http://127.0.0.1:6577`；局域网其他电脑使用镜像网络下的 Windows 服务器局域网地址。运行时无需 Windows Python、旧 Python 控制服务或 D 盘源码；更新与构建是单独的部署动作。
 
-本机验证使用现有 PowerShell 7 会话。系统 `powershell.exe` 5.1 当前脚本执行策略阻止 `.ps1` 运行；没有修改执行策略。可在可运行脚本的现有 PowerShell 7 中执行下述命令，C# 直接启动 `wsl.exe` 不受 PowerShell 脚本策略影响。
+PowerShell 的 RemoteSigned 策略可能将 WSL UNC 路径中的脚本视为未签名的远程文件。对已审查的项目脚本，可用独立进程运行，例如 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\backend.ps1 -Action Status`；该选项只影响这个子进程，不修改已保存的执行策略，也不授予管理员权限。防火墙配置仍需管理员 PowerShell；C# 直接启动 `wsl.exe` 不受 PowerShell 脚本策略影响。
 
 ## 已提供的 PowerShell 工具
 
@@ -19,6 +19,22 @@ Start 在后台持有前台 WSL/C++ 进程并隐藏窗口；等待 `GET /api/sta
 C++ stdout/stderr 直接写入 `/opt/triton_back/runtime/logs/service.log`，不会因 PowerShell 退出后无人读取重定向管道而堵塞；Windows 中的日志记录启动器输出。Stop 校验调用者 token 和 Linux 进程身份，先正常停止，必要时仅终止同一管理进程。
 
 工具使用原生 CreateProcess 的限定句柄列表，只传入 NUL stdin 和两个启动器日志文件，避免继承父会话的管道。后台仍由一个前台 WSL 命令持有 C++ 生命周期。
+
+## 局域网其他电脑调用
+
+由 Windows 服务器按 [部署说明](deployment.md) 启用 WSL2 镜像网络、配置入站规则并启动后端，其他电脑使用该服务器所选网卡的局域网 IPv4。将下面的占位符替换成实际地址；客户端不使用 WSL 内部地址或 `0.0.0.0`：
+
+| 调用 | 局域网地址 |
+|---|---|
+| 查询简要状态和模型版本 | `GET http://<服务器Windows局域网IPv4>:6577/api/status?simple=true` |
+| 选择或切换模型 | `POST http://<服务器Windows局域网IPv4>:6577/api/models/select` |
+| 提交 PNG 推理 | `POST http://<服务器Windows局域网IPv4>:6577/infer` |
+
+请求字段与本机调用相同。Apifox 导入的 Collection 继续以 localhost 为默认值；在实际选中的环境中，将 `baseUrl` 改为 `http://<服务器Windows局域网IPv4>:6577`。远程 C# 客户端也将 `HttpClient.BaseAddress` 指向该地址，服务器本机的启动与管理示例继续使用 `127.0.0.1`。
+
+先从调用电脑实际请求状态接口，确认 HTTP 返回；需要推理时还应检查 `modelReady` 和 `activeModel`，端口可连接不代表模型服务已就绪。镜像网络无需维护 WSL 内部 IP 的端口映射；服务器局域网 IP 或子网变化后，由管理员重新执行 `lan-access.ps1 -Action Configure` 更新入站规则，并更新客户端地址。脚本的预览、状态查询与移除命令见 [部署说明](deployment.md#局域网访问wsl2-镜像网络)，后端仍通过原有 Start、Stop 操作管理。
+
+浏览器网页请求会携带 Origin，需将调用网页实际的协议、主机和端口加入 `config/server.yaml` 的 `allowedOrigins`，然后重启后端。C#、curl 和 Apifox 桌面请求通常不带 Origin，可沿用现有白名单；主动设置 Origin 的请求同样需要匹配白名单。
 
 ## C# 集成
 

@@ -80,8 +80,9 @@ BackendConfig loadBackendConfig(const std::string& path)
     const auto triton = document["triton"];
     BackendConfig config;
     config.server.host = text(server, "host", "127.0.0.1");
-    if (config.server.host != "127.0.0.1" && config.server.host != "localhost" && config.server.host != "::1")
-        throw std::invalid_argument("当前部署要求监听 localhost");
+    if (config.server.host != "127.0.0.1" && config.server.host != "localhost" &&
+        config.server.host != "::1" && config.server.host != "0.0.0.0")
+        throw std::invalid_argument("监听地址仅支持 127.0.0.1、localhost、::1 或 0.0.0.0");
     config.server.port = static_cast<int>(integer(server, "port", 6577, 1, 65535));
     config.server.schemaVersion = text(server, "schemaVersion", "1.0");
     if (config.server.schemaVersion != "1.0") throw std::invalid_argument("只支持协议 1.0");

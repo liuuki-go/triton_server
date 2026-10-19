@@ -45,6 +45,55 @@ bash scripts/wsl/run.sh
 
 run.sh 在前台运行 C++，显式加载 `/opt/triton_back/config/server.yaml`。默认 `autoStart: false`，未指定模型时只开放 HTTP。查询 `GET /api/status` 获取所有模型和版本，再通过 `POST /api/models/select` 明确加载目标。Windows 的 Start 未提供模型参数时也只等待 HTTP 可查询；提供 `-ModelId best -ModelVersion 1.0.0` 时会选择目标并核对返回的 `modelReady` 和 `activeModel`。
 
+## 局域网访问（WSL2 镜像网络）
+
+当前项目配置的 `server.host` 为 `"0.0.0.0"`、端口为 6577，使 C++ 服务监听 WSL 的 IPv4 接口。读取旧部署配置时应核对该字段；Sync 默认保留已有配置，修改后需重启后端。配置校验支持 `127.0.0.1`、`localhost`、`::1`、`0.0.0.0`，未填写 host 时仍默认 `127.0.0.1`。`0.0.0.0` 是监听设置，Windows 本机管理工具仍访问 `http://127.0.0.1:6577`。
+
+Windows 的 WSL2 使用镜像网络（`networkingMode=mirrored`）。局域网客户端通过 Windows 服务器的局域网 IPv4 直接访问服务，无需配置 NAT 端口代理，也无需跟踪 WSL 的内部 IP。网络模式在 Windows 用户的 `.wslconfig` 中设置，修改后需要重启 WSL 才能生效；重启会影响该机器上正在运行的 WSL 进程，应先停止后端。
+
+若 Windows 本机也要使用服务器的局域网 IP 调试，在 `%USERPROFILE%\.wslconfig` 中同时配置 `hostAddressLoopback`：
+
+```ini
+[wsl2]
+networkingMode=mirrored
+
+[experimental]
+hostAddressLoopback=true
+```
+
+保留 `.wslconfig` 中其他已有设置。`hostAddressLoopback` 用于本机通过局域网 IP 回连，其他电脑的局域网访问不依赖此选项；本机也始终可使用 `127.0.0.1`。
+
+镜像网络的入站访问由 `scripts/windows/lan-access.ps1` 维护。脚本验证指定发行版已使用 mirrored 模式，只配置专用 Windows 和 Hyper-V TCP 入站规则；不会修改 `.wslconfig`、重启 WSL、创建端口代理或启动后端。在 Windows 项目根执行，网卡名应与服务器实际使用的适配器一致，下面以 WLAN 为例：
+
+```powershell
+# 只读预览，无需管理员权限
+.\scripts\windows\lan-access.ps1 -Action Configure -Distribution template-clone -InterfaceAlias WLAN -Port 6577 -WhatIf
+# 应用或刷新规则，需要管理员 PowerShell
+.\scripts\windows\lan-access.ps1 -Action Configure -Distribution template-clone -InterfaceAlias WLAN -Port 6577
+# 只读查询当前状态
+.\scripts\windows\lan-access.ps1 -Action Status -Distribution template-clone -InterfaceAlias WLAN -Port 6577
+```
+
+Configure 是默认动作，重复执行会更新专用规则。Windows 规则限定所选网卡、当前局域网 IPv4、实际 IPv4 子网和 TCP 6577，适用于所有网络配置文件（Profile Any）；Hyper-V 规则限定 WSL、相同本地地址、远端子网和 TCP 端口。脚本不会切换全局防火墙开关；全局防火墙关闭时，规则本身不构成访问限制。
+
+本机配置记录与备份默认放在项目的 `runtime/windows/lan-access`，可用 `-StateDirectory` 指定其他位置。Configure、Status 和 Remove 应使用相同的状态目录，这些记录无需上传仓库。服务器局域网 IP 或子网变化后，应重新执行 Configure 更新规则；镜像网络不需要因 WSL NAT 地址变化而刷新映射。
+
+需要移除脚本维护的防火墙入口时，在管理员 PowerShell 中执行：
+
+```powershell
+.\scripts\windows\lan-access.ps1 -Action Remove -Distribution template-clone -InterfaceAlias WLAN -Port 6577
+```
+
+Remove 同样支持 `-WhatIf` 预览，不停止后端，也不改变 WSL 的镜像网络设置。
+
+网络配置完成后，在 Windows 项目根照常启动后端：
+
+```powershell
+.\scripts\windows\backend.ps1 -Action Start -Distribution template-clone -ModelId best -ModelVersion 2.0.0
+```
+
+从调用电脑实际请求 `http://<服务器Windows局域网IPv4>:6577/api/status?simple=true` 判断 HTTP 服务是否可访问，推理就绪还需检查 `modelReady` 和 `activeModel`。其他电脑的三个 HTTP 路由及 Apifox `baseUrl` 设置见 [windows-host.md](windows-host.md)。浏览器跨域调用另需匹配 `allowedOrigins`，与网络和防火墙配置分别生效。后端进程仍由原有 `backend.ps1 -Action Stop` 管理。
+
 ## Linux/WSL 研发快速启动
 
 源码入口是 `src/app/main.cpp` 中的 `main()`。研发启动脚本位于 `src/run.sh`，会通过项目根 CMake 构建 `triton_backend`，然后直接 `exec` 可执行程序；日志继承当前终端，Ctrl+C 走服务正常退出流程。

@@ -111,6 +111,8 @@ PNG 的 `Width`、`Height` 必须与文件像素尺寸一致，`PixelFormat`、`
 
 Apifox 调试可直接导入 [Postman Collection 文件](docs/triton-back.postman_collection.json)：在「导入」中选择 Postman，上传 JSON，并同时导入、选中同名环境。文件包含以上三个接口和 `best / 2.0.0` 请求示例，默认地址 `http://127.0.0.1:6577`，首个请求默认查询简版状态；禁用 `simple` 参数或改为 `false` 可查询完整版。推理前在 `image` 中选择本地 PNG，将 `metadata` 的 `Width`、`Height` 改为图片实际尺寸，并确认该表单字段的 Content-Type 为 `application/json`。
 
+局域网部署采用 WSL2 镜像网络（mirrored）。当前 `config/server.yaml` 使用 `server.host: "0.0.0.0"` 监听 WSL 的 IPv4 接口，本机管理仍使用 `127.0.0.1`。启用镜像网络后，在 Windows 管理员 PowerShell 中执行 `.\scripts\windows\lan-access.ps1 -Action Configure -Distribution template-clone -InterfaceAlias WLAN -Port 6577`，维护 Windows 和 Hyper-V 的局域网入站规则；实际网卡名应与服务器一致。其他电脑通过 Windows 服务器的局域网地址直接调用，无需 NAT 端口代理，将 Apifox 环境的 `baseUrl` 改为 `http://<服务器Windows局域网IPv4>:6577`，三个接口路径不变。网络、脚本预览与启动说明见 [deployment.md](docs/deployment.md)，远程调用说明见 [windows-host.md](docs/windows-host.md)。
+
 上位机只做等比例缩放；后端负责 letterbox、RGB/NCHW/归一化和坐标还原。返回框位于上传图像坐标系，并回显请求关联字段。详细启动流程与 C# 示例见 [windows-host.md](docs/windows-host.md)。
 
 结束整个进程使用：
@@ -157,6 +159,12 @@ python3 tests/integration/test_business_reference.py
 python3 tests/scripts/test_run.py
 python3 tests/protocol/testProtocol.py --output build/verification/protocol-report.json
 python3 tools/environment/collect_environment.py --output /root/system_env_info.txt --copy-to docs/system_env_info.txt
+```
+
+Windows 下可单独验证局域网脚本的地址、子网及规则归属检查；此测试不执行网络或防火墙命令：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\scripts\test_lan_access.ps1
 ```
 
 GPU 集成测试使用本项目的两个 raw 输入及保存的直接 TensorRT 检测参考，检查模型生命周期、版本切换、失败保持旧模型、并发背压和旧请求排空，以及 FP32 / TF32 各实际批量的结果对照。业务测试依次选择全部已配置模型版本，验证 PNG/Raw 及当前模型下的混合编码并发。协议测试会执行模型加载与切换，运行这些测试时应安排专用测试窗口。本地完整日志位于 `build/verification`、`build/dynamic-batch-20261016`、`build/tf32-batch-20261016`，不入库；TF32 摘要保存在 `docs/benchmarks`。环境采集命令生成 `/root/system_env_info.txt` 及可选的 `docs/system_env_info.txt` 本机快照，均不作为仓库交付文件。

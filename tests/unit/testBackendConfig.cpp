@@ -176,10 +176,35 @@ TEST_F(BackendConfigTest, RequiresControlThreadCapacity)
     EXPECT_THROW(triton_backend::loadBackendConfig(writeConfig("workerCount: 8", "maxInFlight: 8")), std::exception);
 }
 
-TEST_F(BackendConfigTest, RejectsUnknownProtocolAndNonLoopback)
+TEST_F(BackendConfigTest, AcceptsWildcardAndLoopbackBindings)
+{
+    for (const char* host : {"0.0.0.0", "127.0.0.1", "localhost", "::1"})
+    {
+        SCOPED_TRACE(host);
+        const auto config = triton_backend::loadBackendConfig(writeConfig(std::string("host: '") + host + "'"));
+        EXPECT_EQ(config.server.host, host);
+    }
+}
+
+TEST_F(BackendConfigTest, DefaultsMissingHostToLoopback)
+{
+    const auto config = triton_backend::loadBackendConfig(writeConfig("port: 6577"));
+    EXPECT_EQ(config.server.host, "127.0.0.1");
+}
+
+TEST_F(BackendConfigTest, RejectsUnknownProtocol)
 {
     EXPECT_THROW(triton_backend::loadBackendConfig(writeConfig("schemaVersion: '2.0'")), std::exception);
-    EXPECT_THROW(triton_backend::loadBackendConfig(writeConfig("host: '0.0.0.0'")), std::exception);
+}
+
+TEST_F(BackendConfigTest, RejectsUnsupportedBindings)
+{
+    for (const char* host : {"192.168.1.10", "::", "backend.example.com", "0.0.0.256"})
+    {
+        SCOPED_TRACE(host);
+        EXPECT_THROW(triton_backend::loadBackendConfig(writeConfig(std::string("host: '") + host + "'")),
+            std::invalid_argument);
+    }
 }
 
 TEST_F(BackendConfigTest, RejectsDuplicateModelsAndBadClassMapping)
