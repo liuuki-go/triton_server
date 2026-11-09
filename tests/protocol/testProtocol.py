@@ -24,7 +24,7 @@ from png_helpers import encode_png
 FIELDS = (
     "SchemaVersion", "RequestId", "Sequence", "FrameId", "CameraId", "ChannelId",
     "CapturedAtUtc", "Width", "Height", "SourcePixelFormat", "ImageEncoding",
-    "ModelId", "RequestedModelVersion", "PixelFormat", "StrideBytes", "RowOrder",
+    "ModelId", "ModelVersion", "PixelFormat", "StrideBytes", "RowOrder",
     "ConfidenceThreshold",
 )
 PIXELS = b"\x00\xff\x80\x01\x02\x03\r\n\x00\x07\x08\x09"
@@ -42,7 +42,7 @@ def metadata(model="best", **changes):
         "Sequence": sequence, "FrameId": 34, "CameraId": "camera-01",
         "ChannelId": "channel-01", "CapturedAtUtc": "2026-10-14T01:02:03.123Z",
         "Width": 2, "Height": 2, "SourcePixelFormat": "Mono12Packed",
-        "ImageEncoding": "Raw", "ModelId": model, "RequestedModelVersion": "1.0.0",
+        "ImageEncoding": "Raw", "ModelId": model, "ModelVersion": "1.0.0",
         "PixelFormat": "RGB8Packed", "StrideBytes": 6, "RowOrder": "TopDown",
     }
     result.update(changes)
@@ -162,7 +162,7 @@ class ProtocolTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        response = http("POST", "/api/models/select", json_bytes({"ModelId": "best", "RequestedModelVersion": "1.0.0"}), "application/json")
+        response = http("POST", "/api/models/select", json_bytes({"ModelId": "best", "ModelVersion": "1.0.0"}), "application/json")
         if response.status != 200 or not response.json().get("ok"):
             raise AssertionError(f"Could not start an already deployed backend: HTTP {response.status} {response.body[:500]!r}")
         cls.wait_ready()
@@ -171,7 +171,7 @@ class ProtocolTests(unittest.TestCase):
         self.select_model("best")
 
     def select_model(self, model, version="1.0.0"):
-        selection = {"ModelId": model, "RequestedModelVersion": version}
+        selection = {"ModelId": model, "ModelVersion": version}
         body = self.assert_json(http("POST", "/api/models/select", json_bytes(selection), "application/json"), 200)
         self.assertEqual(set(body), {"ok", "modelReady", "activeModel"})
         self.assertEqual(set(body["activeModel"]), {"id", "version"})
@@ -346,7 +346,7 @@ class ProtocolTests(unittest.TestCase):
                 self.assert_model_catalog(status)
                 self.assertEqual(status["activeModel"]["id"], selected["activeModel"]["id"])
                 self.assertEqual(status["activeModel"]["version"], selected["activeModel"]["version"])
-                request = metadata(model["id"], RequestedModelVersion=version["version"])
+                request = metadata(model["id"], ModelVersion=version["version"])
                 self.assert_success(infer(request), request)
         self.select_model("yolo26n")
         status = self.assert_json(http("GET", "/api/status"), 200)
@@ -354,13 +354,13 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(status["activeModel"]["id"], "yolo26n")
         request = metadata("best")
         self.assert_error(infer(request), 409, "MODEL_NOT_ACTIVE", request)
-        for selection, code in (({"ModelId": "unknown", "RequestedModelVersion": "1.0.0"}, "MODEL_NOT_FOUND"),
-                                ({"ModelId": "best", "RequestedModelVersion": "missing"}, "MODEL_VERSION_NOT_FOUND")):
+        for selection, code in (({"ModelId": "unknown", "ModelVersion": "1.0.0"}, "MODEL_NOT_FOUND"),
+                                ({"ModelId": "best", "ModelVersion": "missing"}, "MODEL_VERSION_NOT_FOUND")):
             for path in ("/api/models/select",):
                 body = self.assert_error(http("POST", path, json_bytes(selection), "application/json"), 404, code)
                 self.assertEqual(body["activeModel"]["id"], "yolo26n")
                 self.assertTrue(body["modelReady"])
-        for selection in ({}, {"ModelId": "best"}, {"ModelId": "best", "RequestedModelVersion": 1}):
+        for selection in ({}, {"ModelId": "best"}, {"ModelId": "best", "ModelVersion": 1}):
             self.assert_error(http("POST", "/api/models/select", json_bytes(selection), "application/json"), 400)
         request = metadata("yolo26n")
         self.assert_success(infer(request), request)
@@ -468,7 +468,7 @@ class ProtocolTests(unittest.TestCase):
                 request = complete.copy()
                 del request[key]
                 self.assert_error(infer(request), 400, request=request)
-        for key in ("RequestId", "CameraId", "ChannelId", "SourcePixelFormat", "ModelId", "RequestedModelVersion"):
+        for key in ("RequestId", "CameraId", "ChannelId", "SourcePixelFormat", "ModelId", "ModelVersion"):
             for value in ("", " \t\r\n", 42, None, "x" * 257):
                 with self.subTest(field=key, invalid=value):
                     request = metadata(**{key: value})
@@ -523,8 +523,8 @@ class ProtocolTests(unittest.TestCase):
     def test_090_schema_model_and_version_mismatch(self):
         for change, status, code in (({"SchemaVersion": "2.0"}, 400, "UNSUPPORTED_SCHEMA_VERSION"),
                                      ({"ModelId": "other"}, 409, "MODEL_MISMATCH"),
-                                     ({"RequestedModelVersion": "missing"}, 409, "MODEL_VERSION_MISMATCH"),
-                                     ({"RequestedModelVersion": "2.0.0"}, 409, "MODEL_NOT_ACTIVE")):
+                                     ({"ModelVersion": "missing"}, 409, "MODEL_VERSION_MISMATCH"),
+                                     ({"ModelVersion": "2.0.0"}, 409, "MODEL_NOT_ACTIVE")):
             with self.subTest(change=change):
                 request = metadata(**change)
                 self.assert_error(infer(request), status, code, request)
@@ -566,7 +566,7 @@ class ProtocolTests(unittest.TestCase):
             self.skipTest("Switching regression disabled explicitly")
         successes_while_loading = 0
         observed_loading = False
-        selection = {"ModelId": "yolo26n", "RequestedModelVersion": "1.0.0"}
+        selection = {"ModelId": "yolo26n", "ModelVersion": "1.0.0"}
         with ThreadPoolExecutor(max_workers=1) as pool:
             switching = pool.submit(http, "POST", "/api/models/select", json_bytes(selection), "application/json")
             while not switching.done():

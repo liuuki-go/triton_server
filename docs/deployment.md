@@ -203,7 +203,7 @@ env -u NVIDIA_TF32_OVERRIDE /usr/bin/trtexec \
   --saveEngine=build/model-export/best-tf32-batch8.plan --skipInference
 ```
 
-使用既有选择接口传 `{"ModelId":"best","RequestedModelVersion":"3.0.0"}`，或 Windows 启动工具传 `-ModelId best -ModelVersion 3.0.0`。原 FP32 模型仍可通过 `1.0.0`、`2.0.0` 选择，启动示例保持 `2.0.0`。配置更改仍需要重启进程，选择接口不修改配置文件。
+使用既有选择接口传 `{"ModelId":"best","ModelVersion":"3.0.0"}`，或 Windows 启动工具传 `-ModelId best -ModelVersion 3.0.0`。原 FP32 模型仍可通过 `1.0.0`、`2.0.0` 选择，启动示例保持 `2.0.0`。配置更改仍需要重启进程，选择接口不修改配置文件。
 
 本次全 377 张 PNG 的串行对照未通过旧 FP32 的置信度 `1e-5` / 坐标 `0.001 px` 数值阈值：5 张图片的数量和类别分布发生变化；其余结构一致的图片用同类别最大 IoU 一对一匹配，对应框的最大置信度差约 `0.08845`，最大坐标差约 `10.29974 px`。最大值包含所有有效对应框，未按严格容差过滤；结构变化的图片单列，不强行数值配对。无标注数据，不能据此断言准确率相同或下降。速度与差异摘要见 [tf32-20261016.json](benchmarks/tf32-20261016.json)。
 

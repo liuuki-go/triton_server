@@ -17,7 +17,7 @@ from uuid import uuid4
 import benchmark_http as common
 
 
-IDENTITY_FIELDS = ('RequestId', 'Sequence', 'FrameId', 'CameraId', 'ModelId', 'RequestedModelVersion')
+IDENTITY_FIELDS = ('RequestId', 'Sequence', 'FrameId', 'CameraId', 'ModelId', 'ModelVersion')
 BOX_FIELDS = ('x1', 'y1', 'x2', 'y2')
 
 
@@ -167,7 +167,7 @@ def send_image(connection, image, sequence, camera, run_id, model_id, version):
                 'ChannelId': 'pv', 'CapturedAtUtc': common.utc_now(),
                 'Width': description['width'], 'Height': description['height'],
                 'SourcePixelFormat': 'BGR8Packed', 'ImageEncoding': 'Png', 'ModelId': model_id,
-                'RequestedModelVersion': version, 'ConfidenceThreshold': 0.25}
+                'ModelVersion': version, 'ConfidenceThreshold': 0.25}
     row = {'sequence': sequence, 'ok': False, 'httpStatus': 0, 'requestBytes': 0,
            'responseBytes': 0, 'connectionClosed': False}
     detections = None

@@ -43,7 +43,7 @@ Json makeError(
 static constexpr std::array<const char*, 17> metadataFields{
     "SchemaVersion", "RequestId", "Sequence", "FrameId", "CameraId",
     "ChannelId", "CapturedAtUtc", "Width", "Height", "SourcePixelFormat",
-    "ImageEncoding", "ModelId", "RequestedModelVersion", "PixelFormat",
+    "ImageEncoding", "ModelId", "ModelVersion", "PixelFormat",
     "StrideBytes", "RowOrder", "ConfidenceThreshold"
 };
 
@@ -83,9 +83,9 @@ static std::string requiredString(const Json& metadata, const char* field)
 ModelSelection parseModelSelection(const Json& body)
 {
     if (!body.is_object() || body.size() != 2 || !body.contains("ModelId") ||
-        !body.contains("RequestedModelVersion"))
-        throw InvalidInferenceRequest("INVALID_REQUEST", "需要 ModelId 和 RequestedModelVersion 两个字段");
-    return ModelSelection{requiredString(body, "ModelId"), requiredString(body, "RequestedModelVersion")};
+        !body.contains("ModelVersion"))
+        throw InvalidInferenceRequest("INVALID_REQUEST", "需要 ModelId 和 ModelVersion 两个字段");
+    return ModelSelection{requiredString(body, "ModelId"), requiredString(body, "ModelVersion")};
 }
 
 static std::uint64_t requiredUnsigned(const Json& metadata, const char* field)
@@ -155,7 +155,7 @@ static bool isUtcTimestamp(const std::string& value)
 InferenceRequest parseInferenceImage(const Json& metadata, const std::string& pixels)
 {
     for (const char* field : {"SchemaVersion", "RequestId", "CameraId", "ChannelId",
-                             "SourcePixelFormat", "ModelId", "RequestedModelVersion"})
+                             "SourcePixelFormat", "ModelId", "ModelVersion"})
     {
         requiredString(metadata, field);
     }

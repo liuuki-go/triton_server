@@ -54,7 +54,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"ModelId\": \"best\",\n  \"RequestedModelVersion\": \"2.0.0\"\n}",
+          "raw": "{\n  \"ModelId\": \"best\",\n  \"ModelVersion\": \"2.0.0\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -66,7 +66,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["api", "models", "select"]
         },
-        "description": "首次加载与运行中切换共用此接口。请求 JSON 严格只有 ModelId 和 RequestedModelVersion 两个字段，名称及大小写必须一致。RequestedModelVersion 填查询接口返回的业务版本，例如 2.0.0。加载、校验、预热完成后才返回成功；成功响应严格只有 ok、modelReady、activeModel，activeModel 为 null 或仅含 id/version。检查 HTTP 200、ok=true、modelReady=true 和目标 id/version。参数校验或模型控制失败响应（400/413/415/404/503/500）在这三个字段外仅增加 error、message，ok=false；activeModel/modelReady 仍反映实际活动模型，旧模型可能继续可用。Origin 拦截、HTTP 报文错误或无法读取状态的内部异常使用通用错误结构 ok/error/message。新模型准备时旧模型继续工作，失败保持旧模型，成功切流后旧请求处理完再自动卸载。不存在的模型、版本或 Plan 返回 404，加载失败返回 500。响应不再附带完整状态，无需新增查询参数；张量、统计和诊断信息通过 GET /api/status 获取。加载可能较慢，调试时请适当放宽请求超时。"
+        "description": "首次加载与运行中切换共用此接口。请求 JSON 严格只有 ModelId 和 ModelVersion 两个字段，名称及大小写必须一致。ModelVersion 填查询接口返回的业务版本，例如 2.0.0。加载、校验、预热完成后才返回成功；成功响应严格只有 ok、modelReady、activeModel，activeModel 为 null 或仅含 id/version。检查 HTTP 200、ok=true、modelReady=true 和目标 id/version。参数校验或模型控制失败响应（400/413/415/404/503/500）在这三个字段外仅增加 error、message，ok=false；activeModel/modelReady 仍反映实际活动模型，旧模型可能继续可用。Origin 拦截、HTTP 报文错误或无法读取状态的内部异常使用通用错误结构 ok/error/message。新模型准备时旧模型继续工作，失败保持旧模型，成功切流后旧请求处理完再自动卸载。不存在的模型、版本或 Plan 返回 404，加载失败返回 500。响应不再附带完整状态，无需新增查询参数；张量、统计和诊断信息通过 GET /api/status 获取。加载可能较慢，调试时请适当放宽请求超时。"
       },
       "response": []
     },
@@ -87,8 +87,8 @@
               "key": "metadata",
               "type": "text",
               "contentType": "application/json",
-              "description": "JSON 原文，单独一个表单字段，Content-Type 必须是 application/json。Width/Height 填 PNG 实际像素尺寸。ModelId/RequestedModelVersion 必须匹配当前模型。ConfidenceThreshold 可选，范围 0 到 1，默认 0.25。其余 13 个字段必填；CapturedAtUtc 使用 UTC 时间；Sequence/FrameId 为非负整数。SourcePixelFormat 记录相机源像素格式。PNG 不需要 PixelFormat、StrideBytes、RowOrder。",
-              "value": "{\n  \"SchemaVersion\": \"1.0\",\n  \"RequestId\": \"apifox-0001\",\n  \"Sequence\": 1,\n  \"FrameId\": 1,\n  \"CameraId\": \"camera-1\",\n  \"ChannelId\": \"channel-1\",\n  \"CapturedAtUtc\": \"2026-10-16T08:00:00Z\",\n  \"Width\": 800,\n  \"Height\": 800,\n  \"SourcePixelFormat\": \"BGR8Packed\",\n  \"ImageEncoding\": \"Png\",\n  \"ModelId\": \"best\",\n  \"RequestedModelVersion\": \"2.0.0\",\n  \"ConfidenceThreshold\": 0.25\n}"
+              "description": "JSON 原文，单独一个表单字段，Content-Type 必须是 application/json。Width/Height 填 PNG 实际像素尺寸。ModelId/ModelVersion 必须匹配当前模型。ConfidenceThreshold 可选，范围 0 到 1，默认 0.25。其余 13 个字段必填；CapturedAtUtc 使用 UTC 时间；Sequence/FrameId 为非负整数。SourcePixelFormat 记录相机源像素格式。PNG 不需要 PixelFormat、StrideBytes、RowOrder。",
+              "value": "{\n  \"SchemaVersion\": \"1.0\",\n  \"RequestId\": \"apifox-0001\",\n  \"Sequence\": 1,\n  \"FrameId\": 1,\n  \"CameraId\": \"camera-1\",\n  \"ChannelId\": \"channel-1\",\n  \"CapturedAtUtc\": \"2026-10-16T08:00:00Z\",\n  \"Width\": 800,\n  \"Height\": 800,\n  \"SourcePixelFormat\": \"BGR8Packed\",\n  \"ImageEncoding\": \"Png\",\n  \"ModelId\": \"best\",\n  \"ModelVersion\": \"2.0.0\",\n  \"ConfidenceThreshold\": 0.25\n}"
             },
             {
               "key": "image",

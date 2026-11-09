@@ -101,7 +101,7 @@ string catalogJson = await catalogResponse.Content.ReadAsStringAsync();
 // 展示 catalogJson 中的 models[].versions，下面使用用户选择的值。
 string selectedModelId = "best", selectedModelVersion = "2.0.0";
 string selectionJson = JsonSerializer.Serialize(new {
-    ModelId = selectedModelId, RequestedModelVersion = selectedModelVersion
+    ModelId = selectedModelId, ModelVersion = selectedModelVersion
 });
 using var loaded = await http.PostAsync("/api/models/select",
     new StringContent(selectionJson, Encoding.UTF8, "application/json"), startup.Token);
@@ -131,7 +131,7 @@ Linux helper 只接受匹配 token、PID 启动时间及命令行的进程；最
 | 接口 | 含义 |
 |---|---|
 | `GET /api/status` | 默认返回完整状态；`?simple=true` 返回简要状态和模型版本目录；不加载模型 |
-| `POST /api/models/select` | 明确指定 ModelId、RequestedModelVersion，首次加载与切换共用；只返回最小控制结果 |
+| `POST /api/models/select` | 明确指定 ModelId、ModelVersion，首次加载与切换共用；只返回最小控制结果 |
 | `POST /infer` | 唯一推理入口，multipart `metadata` 和 PNG 文件二进制 `image`；兼容 Raw |
 
 有效的 `GET /api/status` 查询以 HTTP 200 返回状态；200 表示 HTTP 可访问，`modelReady: true` 才表示当前有模型可以推理。非法取值或值不同的重复 `simple` 参数返回 `400 INVALID_QUERY`。上位机不需要独立模型停止接口；切换自动清理旧模型，关闭后端进程仍使用部署工具的 Stop。
@@ -197,7 +197,7 @@ Linux helper 只接受匹配 token、PID 启动时间及命令行的进程；最
 POST /api/models/select
 Content-Type: application/json
 
-{"ModelId":"best","RequestedModelVersion":"2.0.0"}
+{"ModelId":"best","ModelVersion":"2.0.0"}
 ```
 
 选择接口成功时只返回 `ok`、`modelReady`、`activeModel` 三个字段。`activeModel` 为 null 或仅含 `id`、`version`，指明实际生效的模型和版本。例如 HTTP 200：
@@ -228,14 +228,14 @@ Content-Type: application/json
 
 目标加载失败时不改变旧实例，无需重新加载旧模型。错误响应包含实际 `activeModel`、`modelReady`，以及本次失败的 `error`、`message`；`lastError` 和旧实例的 `retiringModels[].cleanupError` 通过状态查询读取。旧实例清理失败会重试，不把已生效的新模型改判为失败。切换期间需要容纳新旧实例的显存，并可能产生延迟波动；显存不足会返回错误并保持旧模型。
 
-推理 metadata 必须继续携带当前 ModelId、RequestedModelVersion。准备期间仍发送旧模型选择；切流后新提交的旧选择返回 `409 MODEL_NOT_ACTIVE`，已经接收的旧请求不受影响。上位机应在选择成功后更新后续帧的模型字段，并保留各请求原有版本关联。并发提交撞上切流边界时，查询状态确认当前选择，再按业务决定是否重新提交该帧，避免把旧帧任务静默改用其他模型。
+推理 metadata 必须继续携带当前 ModelId、ModelVersion。准备期间仍发送旧模型选择；切流后新提交的旧选择返回 `409 MODEL_NOT_ACTIVE`，已经接收的旧请求不受影响。上位机应在选择成功后更新后续帧的模型字段，并保留各请求原有版本关联。并发提交撞上切流边界时，查询状态确认当前选择，再按业务决定是否重新提交该帧，避免把旧帧任务静默改用其他模型。
 
 运行期间切换也使用同一个接口，以下代码沿用启动示例中的 `http` 和选择变量：
 
 ```csharp
 string nextModelId = "yolo26n", nextModelVersion = "1.0.0";
 string switchJson = JsonSerializer.Serialize(new {
-    ModelId = nextModelId, RequestedModelVersion = nextModelVersion
+    ModelId = nextModelId, ModelVersion = nextModelVersion
 });
 using var switched = await http.PostAsync("/api/models/select",
     new StringContent(switchJson, Encoding.UTF8, "application/json"));
@@ -297,14 +297,14 @@ wsl.exe -d template-clone -u root --cd /opt/triton_back --exec bash scripts/wsl/
   "SourcePixelFormat": "Mono8",
   "ImageEncoding": "Png",
   "ModelId": "best",
-  "RequestedModelVersion": "2.0.0",
+  "ModelVersion": "2.0.0",
   "ConfidenceThreshold": 0.25
 }
 ```
 
 除 `ConfidenceThreshold` 可省略（默认 0.25）外，示例字段均为必填。`Width`、`Height` 为 PNG 本身的像素尺寸，不是缩放前相机尺寸，也不是模型输入尺寸。`SourcePixelFormat` 记录相机源像素格式，实际颜色解码由 PNG 文件决定；`PixelFormat`、`StrideBytes`、`RowOrder` 不必提供。标识字段按原值回显，检测框位于上传 PNG 的坐标系。
 
-使用动态版时 metadata 的 `RequestedModelVersion` 保持与当前选择的 `2.0.0` 一致，每个请求仍只上传一张 PNG，无需把四张图拼接成一张。四路相机可以并发提交各自请求，Triton 尽量合成 4 张；10 毫秒等待预算耗尽可执行小批次，不保证四张来自不同相机或同一拍次。每个响应仍只对应自己的 RequestId、CameraId、FrameId，客户端需按这些字段关联结果。相机数及等待策略由部署配置的 `batching` 决定，不通过单帧 metadata 修改。
+使用动态版时 metadata 的 `ModelVersion` 保持与当前选择的 `2.0.0` 一致，每个请求仍只上传一张 PNG，无需把四张图拼接成一张。四路相机可以并发提交各自请求，Triton 尽量合成 4 张；10 毫秒等待预算耗尽可执行小批次，不保证四张来自不同相机或同一拍次。每个响应仍只对应自己的 RequestId、CameraId、FrameId，客户端需按这些字段关联结果。相机数及等待策略由部署配置的 `batching` 决定，不通过单帧 metadata 修改。
 
 支持每通道最多 8 位的灰度、彩色和带透明通道 PNG。透明通道被忽略，不与背景合成；不应用 EXIF 方向旋转。16 位 PNG 会被拒绝，避免静默改变相机数值。PNG 解码后的三通道 BGR 像素最多 64 MiB，整个 HTTP 请求默认最多 64 MiB。非法、损坏、超限、位深不支持或宽高不匹配的 PNG 返回 `400 INVALID_PNG_IMAGE`。
 
@@ -317,7 +317,7 @@ string metadataJson = JsonSerializer.Serialize(new {
     Sequence = (ulong)42, FrameId = (ulong)42,
     CameraId = "camera-1", ChannelId = "1", CapturedAtUtc = DateTime.UtcNow,
     Width = pngWidth, Height = pngHeight, SourcePixelFormat = "Mono8",
-    ImageEncoding = "Png", ModelId = selectedModelId, RequestedModelVersion = selectedModelVersion,
+    ImageEncoding = "Png", ModelId = selectedModelId, ModelVersion = selectedModelVersion,
     ConfidenceThreshold = 0.25
 });
 using var form = new MultipartFormDataContent();

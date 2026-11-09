@@ -96,7 +96,7 @@ def measure(images, endpoint, concurrency, seconds, model_id, version, server_pi
                             'CapturedAtUtc': captured, 'Width': description['width'],
                             'Height': description['height'], 'SourcePixelFormat': 'BGR8Packed',
                             'ImageEncoding': 'Png', 'ModelId': model_id,
-                            'RequestedModelVersion': version, 'ConfidenceThreshold': 0.25}
+                            'ModelVersion': version, 'ConfidenceThreshold': 0.25}
                 request_started = time.perf_counter()
                 row = {'sequence': sequence, 'imageIndex': image_index, 'ok': False,
                        'httpStatus': 0, 'requestBytes': 0, 'responseBytes': 0,
@@ -114,7 +114,7 @@ def measure(images, endpoint, concurrency, seconds, model_id, version, server_pi
                     result = json.loads(raw)
                     if response.status != 200 or result.get('ok') is not True:
                         raise RuntimeError(result.get('error', f'HTTP_{response.status}'))
-                    for field in ('RequestId', 'FrameId', 'ModelId', 'RequestedModelVersion'):
+                    for field in ('RequestId', 'FrameId', 'ModelId', 'ModelVersion'):
                         if result.get(field) != metadata[field]:
                             raise RuntimeError('RESPONSE_IDENTITY_MISMATCH')
                     count = result['detectionCount']

@@ -95,7 +95,7 @@ bash scripts/wsl/run.sh
 
 ## Windows 上位机接入
 
-上位机负责启动并持有 `wsl.exe` 前台会话，持续读取标准输出和错误输出，避免日志管道阻塞。启动顺序：创建后端进程 → `GET /api/status?simple=true` 查询简要状态和所有注册版本 → `POST /api/models/select` 指定 `ModelId` 和 `RequestedModelVersion` → 确认响应的 `modelReady: true` 且 `activeModel` 匹配 → 提交推理。首次加载和运行中切换使用同一个选择接口，HTTP 进程无需重启。
+上位机负责启动并持有 `wsl.exe` 前台会话，持续读取标准输出和错误输出，避免日志管道阻塞。启动顺序：创建后端进程 → `GET /api/status?simple=true` 查询简要状态和所有注册版本 → `POST /api/models/select` 指定 `ModelId` 和 `ModelVersion` → 确认响应的 `modelReady: true` 且 `activeModel` 匹配 → 提交推理。首次加载和运行中切换使用同一个选择接口，HTTP 进程无需重启。
 
 启动后调用 `http://127.0.0.1:6577/infer`。multipart 只有 `metadata` JSON 和 `image` 文件二进制两部分，必须声明 `Content-Length`。上位机使用 PNG 时填写 `ImageEncoding: "Png"`，`image` 上传完整 PNG 文件字节，类型为 `image/png` 或 `application/octet-stream`；无需 Base64，也无需上传原始像素布局。metadata 保留模型、业务版本、相机、帧号、尺寸、源像素格式与可选置信度。
 
@@ -104,7 +104,7 @@ PNG 的 `Width`、`Height` 必须与文件像素尺寸一致，`PixelFormat`、`
 | 接口 | 用途 |
 | --- | --- |
 | `GET /api/status` | 默认返回完整状态；`?simple=true` 只返回简要状态、模型版本及文件可用性；有效查询返回 200，`modelReady` 表示可推理 |
-| `POST /api/models/select` | 显式指定 `ModelId`、`RequestedModelVersion`；成功只返回 `ok`、`modelReady`、`activeModel`，失败另含 `error`、`message` |
+| `POST /api/models/select` | 显式指定 `ModelId`、`ModelVersion`；成功只返回 `ok`、`modelReady`、`activeModel`，失败另含 `error`、`message` |
 | `POST /infer` | 唯一推理入口 |
 
 状态查询支持 `?simple`、`?simple=true` 或 `?simple=1` 返回简版；不传参数、`?simple=false` 或 `?simple=0` 返回原有完整版。非法取值或值不同的重复 `simple` 参数返回 `400 INVALID_QUERY`，相同值重复按一个值处理。简版字段与示例见 [windows-host.md](docs/windows-host.md)。选择接口固定返回最小结果，`activeModel` 为 null 或仅含 `id`、`version`；新模型成功才切流，失败保持旧模型。详细状态和诊断信息另查 `GET /api/status`。
@@ -137,7 +137,7 @@ Apifox 调试可直接导入 [Postman Collection 文件](docs/triton-back.postma
 
 `best` 各版本均为 20 类；`yolo26n/1.0.0` 为 640 输入、80 类，继续使用单图模式。动态模型状态中的张量为 `images[-1,3,960,960]`、`output0[-1,300,6]`，`-1` 表示内部 batch 轴；单个请求仍返回自己的检测结果。通过 `activeModel.executionStatistics` 的执行计数和 `batch_stats` 核对实际合批，不能只看客户端并发数。
 
-`best/3.0.0` 是可选的 TF32 版本，映射到 `models/best/3/model.plan`，沿用相同 960 输入、1/4/8 profile 和合批配置。输入输出仍为 FP32，内部允许 TF32 与 FP32 执行策略混用；重建命令见 [deployment.md](docs/deployment.md)。选择方式为 `ModelId: "best"`、`RequestedModelVersion: "3.0.0"`，或启动时传 `-ModelId best -ModelVersion 3.0.0`。示例继续选择 FP32 的 `2.0.0`。
+`best/3.0.0` 是可选的 TF32 版本，映射到 `models/best/3/model.plan`，沿用相同 960 输入、1/4/8 profile 和合批配置。输入输出仍为 FP32，内部允许 TF32 与 FP32 执行策略混用；重建命令见 [deployment.md](docs/deployment.md)。选择方式为 `ModelId: "best"`、`ModelVersion: "3.0.0"`，或启动时传 `-ModelId best -ModelVersion 3.0.0`。示例继续选择 FP32 的 `2.0.0`。
 
 TF32 不满足原 FP32 的数值一致性阈值：377 张对照有 5 张检测数量变化；在数量和类别分布相同的图片中，对应框最大置信度差约 0.0885、最大坐标差约 10.30 像素。此比较没有标注真值，不能判断准确率升降。仓库保存了 [本机 benchmark 与差异摘要](docs/benchmarks/tf32-20261016.json)，TF32 的传输回归使用同一 Engine、同一像素、各实际 batch 的独立直接 TensorRT 参考；原 FP32 参考及其严格阈值保持不变。
 

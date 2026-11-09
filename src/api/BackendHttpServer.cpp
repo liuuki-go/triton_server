@@ -245,7 +245,7 @@ void BackendHttpServer::registerRoutes()
                 return;
             }
             const auto modelId = metadata["ModelId"].get<std::string>();
-            const auto version = metadata["RequestedModelVersion"].get<std::string>();
+            const auto version = metadata["ModelVersion"].get<std::string>();
             const auto model = std::find_if(config_.models.begin(), config_.models.end(),
                 [&modelId](const auto& value) { return value.id == modelId; });
             if (model == config_.models.end()) { fail(409, "MODEL_MISMATCH", "未配置该模型"); return; }

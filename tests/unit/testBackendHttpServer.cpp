@@ -116,7 +116,7 @@ protected:
             {"Sequence", 42}, {"FrameId", 42}, {"CameraId", "camera-1"}, {"ChannelId", "1"},
             {"CapturedAtUtc", "2026-10-14T01:02:03Z"}, {"Width", 2}, {"Height", 2},
             {"SourcePixelFormat", "BGR8Packed"}, {"ImageEncoding", "Raw"},
-            {"ModelId", "best"}, {"RequestedModelVersion", "1.0.0"},
+            {"ModelId", "best"}, {"ModelVersion", "1.0.0"},
             {"PixelFormat", "BGR8Packed"}, {"StrideBytes", 6}, {"RowOrder", "TopDown"},
             {"ConfidenceThreshold", 0.4}};
     }
@@ -299,7 +299,7 @@ TEST_F(BackendHttpServerTest, OneSelectionRouteLoadsInitiallyAndSwitchesToAnothe
 {
     for (const char* version : {"1.0.0", "2.0.0", "2.0.0"})
     {
-        const Json selection{{"ModelId", "best"}, {"RequestedModelVersion", version}};
+        const Json selection{{"ModelId", "best"}, {"ModelVersion", version}};
         const auto selected = client->Post("/api/models/select", selection.dump(), "application/json");
         ASSERT_TRUE(selected);
         ASSERT_EQ(selected->status, 200);
@@ -317,7 +317,7 @@ TEST_F(BackendHttpServerTest, OneSelectionRouteLoadsInitiallyAndSwitchesToAnothe
     EXPECT_TRUE(full.at("activeModel").contains("tritonVersion"));
     EXPECT_EQ(full.at("models")[0].at("versions").size(), 2U);
     auto frame = metadata();
-    frame["RequestedModelVersion"] = "2.0.0";
+    frame["ModelVersion"] = "2.0.0";
     const auto response = infer(frame);
     ASSERT_TRUE(response);
     EXPECT_EQ(response->status, 200);
@@ -327,17 +327,17 @@ TEST_F(BackendHttpServerTest, OneSelectionRouteLoadsInitiallyAndSwitchesToAnothe
 TEST_F(BackendHttpServerTest, MissingSelectionReturnsClearErrorAndMalformedControlsDoNotSwitch)
 {
     for (const Json& body : {Json::object(), Json{{"ModelId", "best"}},
-        Json{{"ModelId", "best"}, {"RequestedModelVersion", 2}},
-        Json{{"ModelId", "best"}, {"RequestedModelVersion", "1.0.0"}, {"extra", true}}})
+        Json{{"ModelId", "best"}, {"ModelVersion", 2}},
+        Json{{"ModelId", "best"}, {"ModelVersion", "1.0.0"}, {"extra", true}}})
     {
         const auto response = client->Post("/api/models/select", body.dump(), "application/json");
         expectSelectionError(response, 400,
-            body.contains("RequestedModelVersion") && body.at("RequestedModelVersion").is_number()
+            body.contains("ModelVersion") && body.at("ModelVersion").is_number()
                 ? "INVALID_METADATA" : "INVALID_REQUEST");
     }
     for (const auto& missing : {ModelSelection{"unknown", "1.0.0"}, ModelSelection{"best", "unknown"}})
     {
-        const Json body{{"ModelId", missing.modelId}, {"RequestedModelVersion", missing.version}};
+        const Json body{{"ModelId", missing.modelId}, {"ModelVersion", missing.version}};
         const auto response = client->Post("/api/models/select", body.dump(), "application/json");
         expectSelectionError(response, 404,
             missing.modelId == "unknown" ? "MODEL_NOT_FOUND" : "MODEL_VERSION_NOT_FOUND");
@@ -347,7 +347,7 @@ TEST_F(BackendHttpServerTest, MissingSelectionReturnsClearErrorAndMalformedContr
 
 TEST_F(BackendHttpServerTest, SelectionFailuresWithoutAnActiveModelReturnOnlyErrorAndNullIdentity)
 {
-    const Json selection{{"ModelId", "best"}, {"RequestedModelVersion", "1.0.0"}};
+    const Json selection{{"ModelId", "best"}, {"ModelVersion", "1.0.0"}};
     const auto malformed = client->Post("/api/models/select", "not-json", "application/json");
     expectSelectionError(malformed, 400, "INVALID_JSON");
     const auto unsupported = client->Post("/api/models/select", selection.dump(), "text/plain");
@@ -368,7 +368,7 @@ TEST_F(BackendHttpServerTest, SelectionFailuresWithoutAnActiveModelReturnOnlyErr
 
 TEST_F(BackendHttpServerTest, SelectionRejectsInvalidContentAndPreservesActiveModelOnLoadFailure)
 {
-    const Json selection{{"ModelId", "best"}, {"RequestedModelVersion", "1.0.0"}};
+    const Json selection{{"ModelId", "best"}, {"ModelVersion", "1.0.0"}};
     const auto selected = client->Post("/api/models/select", selection.dump(), "application/json");
     ASSERT_TRUE(selected);
     ASSERT_EQ(selected->status, 200);
@@ -387,7 +387,7 @@ TEST_F(BackendHttpServerTest, SelectionRejectsInvalidContentAndPreservesActiveMo
     expectSelectionError(payloadTooLarge, 413, "PAYLOAD_TOO_LARGE", true, activeModel);
     for (const auto& missing : {ModelSelection{"unknown", "1.0.0"}, ModelSelection{"best", "unknown"}})
     {
-        const Json target{{"ModelId", missing.modelId}, {"RequestedModelVersion", missing.version}};
+        const Json target{{"ModelId", missing.modelId}, {"ModelVersion", missing.version}};
         const auto response = client->Post("/api/models/select", target.dump(), "application/json");
         expectSelectionError(response, 404,
             missing.modelId == "unknown" ? "MODEL_NOT_FOUND" : "MODEL_VERSION_NOT_FOUND", true, activeModel);
@@ -395,7 +395,7 @@ TEST_F(BackendHttpServerTest, SelectionRejectsInvalidContentAndPreservesActiveMo
     for (int failure : {1, 2})
     {
         service.selectionFailure = failure;
-        const Json target{{"ModelId", "best"}, {"RequestedModelVersion", "2.0.0"}};
+        const Json target{{"ModelId", "best"}, {"ModelVersion", "2.0.0"}};
         const auto response = client->Post("/api/models/select", target.dump(), "application/json");
         expectSelectionError(response, failure == 1 ? 503 : 500,
             failure == 1 ? "BACKEND_NOT_READY" : "MODEL_CONTROL_FAILED", true, activeModel);
@@ -499,7 +499,7 @@ TEST_F(BackendHttpServerTest, InvalidPngHeaderOrSizeIsRejectedBeforeCallingServi
 TEST_F(BackendHttpServerTest, RejectsInvalidModelBeforeCallingService)
 {
     auto body = metadata();
-    body["RequestedModelVersion"] = "missing-version";
+    body["ModelVersion"] = "missing-version";
     const auto response = infer(body);
     ASSERT_TRUE(response);
     EXPECT_EQ(response->status, 409);

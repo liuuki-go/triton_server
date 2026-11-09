@@ -72,7 +72,7 @@ class BenchmarkHttpTest(unittest.TestCase):
                     self.send_json(503, {'ok': False, 'error': 'SERVICE_BUSY'})
                     return
                 result = {field: metadata[field] for field in (
-                    'RequestId', 'FrameId', 'ModelId', 'RequestedModelVersion')}
+                    'RequestId', 'FrameId', 'ModelId', 'ModelVersion')}
                 result.update(ok=True, detectionCount=0, detections=[],
                               timingsMs={stage: 0.1 for stage in benchmark_http.STAGES})
                 self.send_json(200, result)

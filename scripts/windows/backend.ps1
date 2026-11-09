@@ -56,7 +56,7 @@ function Wait-Endpoint([string]$Url, [System.Diagnostics.Process]$Child) {
 
 function Initialize-ModelSelection([string]$Url) {
     if ([string]::IsNullOrWhiteSpace($ModelId)) { return Wait-Endpoint "$Url/api/status" $null }
-    $Body = @{ ModelId = $ModelId; RequestedModelVersion = $ModelVersion } | ConvertTo-Json -Compress
+    $Body = @{ ModelId = $ModelId; ModelVersion = $ModelVersion } | ConvertTo-Json -Compress
     $Status = Invoke-RestMethod -Uri "$Url/api/models/select" -Method Post -ContentType 'application/json' -Body $Body -TimeoutSec $StartupTimeoutSeconds
     if (-not $Status.modelReady -or $Status.activeModel.id -cne $ModelId -or $Status.activeModel.version -cne $ModelVersion) {
         throw 'The requested model and version did not become active; inspect the backend status and lastError.'

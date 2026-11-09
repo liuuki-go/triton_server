@@ -65,7 +65,7 @@ def metadata_for(fixture, model, index, encoding):
             "CapturedAtUtc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "Width": fixture["width"], "Height": fixture["height"],
             "SourcePixelFormat": fixture["pixelFormat"], "ImageEncoding": encoding,
-            "ModelId": model["id"], "RequestedModelVersion": model["businessVersion"],
+            "ModelId": model["id"], "ModelVersion": model["businessVersion"],
             "ConfidenceThreshold": 0.25}
     if encoding == "Raw":
         result.update(PixelFormat=fixture["pixelFormat"], StrideBytes=fixture["strideBytes"], RowOrder=fixture["rowOrder"])
@@ -215,7 +215,7 @@ def main():
                 comparison = check_result(result, sent, model, expected["models"][model["id"]],
                                           expected["confidenceTolerance"], expected["coordinateTolerance"])
                 comparison["referenceKind"] = "strict saved original FP32 TensorRT baseline"
-            return {"ModelId": model["id"], "RequestedModelVersion": model["businessVersion"],
+            return {"ModelId": model["id"], "ModelVersion": model["businessVersion"],
                     "ImageEncoding": encoding, "RequestId": sent["RequestId"],
                     "FrameId": sent["FrameId"], "CameraId": sent["CameraId"], **comparison}
         finally:
@@ -229,7 +229,7 @@ def main():
         cases = [(fixture, model) for fixture in fixtures for (model_id, _), model in models.items()
                  if model_id == fixture["modelId"]]
         for index, (fixture, model) in enumerate(cases):
-            selected = control.call("/api/models/select", {"ModelId": model["id"], "RequestedModelVersion": model["businessVersion"]})
+            selected = control.call("/api/models/select", {"ModelId": model["id"], "ModelVersion": model["businessVersion"]})
             assert set(selected) == {"ok", "modelReady", "activeModel"}
             assert set(selected["activeModel"]) == {"id", "version"}
             assert selected["activeModel"]["id"] == model["id"]
