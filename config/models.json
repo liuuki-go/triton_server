@@ -152,7 +152,7 @@
         "preferredBatchSizes": [
           4
         ],
-        "maxQueueDelayMicroseconds": 10000
+        "maxQueueDelayMicroseconds": 0
       }
     },
     {

@@ -18,6 +18,7 @@ from uuid import uuid4
 TARGET = Path('/opt/triton_back')
 MARKER = '.triton-back-project'
 OWNER_ENV = 'TRITON_BACK_OWNER_TOKEN'
+MODEL_MANIFEST = 'models/model_build/manifest.json'
 DIRECTORIES = frozenset(('src', 'config', 'models', 'model_sources', 'tests', 'docs', 'scripts', 'tools'))
 LEGACY_SOURCE_DIRECTORIES = frozenset(('api', 'app', 'services', 'configuration', 'domain', 'inference'))
 ROOT_FILES = frozenset(('CMakeLists.txt', '.gitignore', 'README.md'))
@@ -65,11 +66,11 @@ def read_archive(data):
     for name, content in files.items():
         if hashlib.sha256(content).hexdigest() != manifest['files'][name]:
             raise ValueError('Archive checksum mismatch: ' + name)
-    for required in ('CMakeLists.txt', 'src/app/main.cpp', 'config/server.yaml', 'models/manifest.json',
-                     'scripts/wsl/build.sh', 'scripts/wsl/run.sh', 'tools/manage.py'):
+    for required in ('CMakeLists.txt', 'src/app/main.cpp', 'src/run.sh', 'config/server.yaml',
+                     'config/models.json', MODEL_MANIFEST, 'tools/manage.py'):
         if required not in files:
             raise ValueError('Incomplete project archive: ' + required)
-    model_manifest = json.loads(files['models/manifest.json'])
+    model_manifest = json.loads(files[MODEL_MANIFEST])
     for model in model_manifest['models']:
         for path_key, hash_key in (('enginePath', 'sha256'), ('onnxPath', 'onnxSha256')):
             name = model[path_key]

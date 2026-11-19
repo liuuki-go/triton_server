@@ -130,7 +130,7 @@ int main(int argc, char** argv)
         if (fs::exists(outputPath)) throw std::runtime_error("Output already exists; refusing to replace a reference");
         const auto serialized = readFile(argv[1]);
         const auto engineSha256 = sha256(serialized);
-        const auto manifest = Json::parse(readFile(project / "models/manifest.json"));
+        const auto manifest = Json::parse(readFile(project / "models/model_build/manifest.json"));
         const auto manifestModel = std::find_if(manifest.at("models").begin(), manifest.at("models").end(),
             [](const auto& item) { return item.at("id") == "best" && item.at("tritonVersion") == 3; });
         if (manifestModel == manifest.at("models").end()) throw std::runtime_error("Missing best version 3 model manifest entry");

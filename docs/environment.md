@@ -54,14 +54,13 @@ wsl.exe -d triton-prod -u root --exec python3 /opt/triton_back/tools/environment
 
 ## 更新工程后构建与运行
 
-先使用工程的 Windows 部署脚本同步完整项目，再在 WSL 内执行以下操作；Windows 生命周期操作详见 `docs/windows-host.md`。
+从 Windows checkout 更新时，先按 [部署说明](deployment.md) 同步完整项目，再在 WSL 内执行：
 
 ```bash
 cd /opt/triton_back
-bash scripts/wsl/build.sh
-bash scripts/wsl/run.sh
+bash src/run.sh --release
 ```
 
-`build.sh` 使用发行版已安装的编译依赖及 `/opt/triton/2.71.0`，`run.sh` 指定工程自身配置。正常业务构建和运行不需要重新编译 Triton，也不需要原项目目录或测试对照目录。
+`src/run.sh` 使用发行版已安装的编译依赖及 `/opt/triton/2.71.0`，读取 `config/server.yaml`，按该配置从 `models/model_build/` 加载模型。构建和运行使用当前项目及已安装的系统依赖。Windows 上位机受管启动见 [接入说明](windows-host.md)。
 
-运行后的兼容验收必须包括 `GET /api/status` 查询全部模型版本和能力、通过 `POST /api/models/select` 依次选择两个模型、核对状态中的 `modelReady` 与 `activeModel`，以及 `POST /infer` 的实际 PNG/原始像素推理。状态查询 HTTP 200 只表示 HTTP 可访问。还应检查候选准备期间旧模型继续推理、失败不改变旧模型、成功后旧请求完成并自动卸载；切换期间显存需同时容纳两个实例。仅查询版本、`ldd` 成功或 Core API 成功不足以证明模型可以运行。
+运行后的兼容验收包括 `GET /api/status` 查询各模型版本和能力、通过 `POST /api/models/select` 依次选择各业务版本、核对状态中的 `modelReady` 与 `activeModel`，以及 `POST /infer` 的实际 PNG 和原始像素推理。还应检查候选准备期间旧模型继续推理、失败时保持旧模型、成功后旧请求完成并自动卸载。切换期间显存需同时容纳两个实例。

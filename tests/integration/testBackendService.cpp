@@ -20,7 +20,7 @@
 #include <unistd.h>
 
 #ifndef TEST_MODEL_REPOSITORY
-#define TEST_MODEL_REPOSITORY "/opt/triton_back/models"
+#define TEST_MODEL_REPOSITORY "/opt/triton_back/models/model_build"
 #endif
 
 using namespace triton_backend;

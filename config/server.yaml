@@ -14,7 +14,7 @@ server:
 
 triton:
   root: "/opt/triton/2.71.0"
-  repository: "../models"
+  repository: "../models/model_build"
   modelConfigPath: "models.json"
   maxInFlight: 8
   stopTimeoutSeconds: 30

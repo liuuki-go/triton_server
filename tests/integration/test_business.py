@@ -15,6 +15,7 @@ from uuid import uuid4
 
 
 PROJECT = Path(__file__).resolve().parents[2]
+MODEL_REPOSITORY = PROJECT / "models/model_build"
 sys.path.insert(0, str(PROJECT / "tests"))
 from png_helpers import encode_png
 
@@ -101,13 +102,14 @@ def load_tf32_reference(directory, model, fixture, expected):
     reference = json.loads((directory / "expected-best-tf32.json").read_text(encoding="utf-8"))
     assert (reference["modelId"], reference["businessVersion"]) == TF32_VERSION
     assert reference["tritonVersion"] == model["tritonVersion"] == 3
-    manifest = json.loads((PROJECT / "models/manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((MODEL_REPOSITORY / "manifest.json").read_text(encoding="utf-8"))
     entries = [item for item in manifest["models"] if item["id"] == model["id"] and
                item["tritonVersion"] == model["tritonVersion"]]
     assert len(entries) == 1, "The versioned Engine manifest entry must be unique"
     assert reference["engineSha256"] == entries[0]["sha256"]
     engine = PROJECT / entries[0]["enginePath"]
-    assert engine.resolve() == (PROJECT / "models" / model["tritonName"] / str(model["tritonVersion"]) / "model.plan").resolve()
+    expected_engine = MODEL_REPOSITORY / model["tritonName"] / str(model["tritonVersion"]) / "model.plan"
+    assert engine.resolve() == expected_engine.resolve(), (engine, expected_engine)
     assert hashlib.sha256(engine.read_bytes()).hexdigest() == reference["engineSha256"]
     assert reference["rawSha256"] == fixture["sha256"]
     assert (reference["width"], reference["height"]) == (fixture["width"], fixture["height"])

@@ -251,7 +251,7 @@ def render(report):
     for service in report["services"]:
         lines += [json.dumps(service, ensure_ascii=False, indent=2)]
     lines += ["", "7. 克隆和验证边界"] + report["limits"]
-    lines += ["更新项目后执行独立工程 scripts/wsl/build.sh 和 scripts/wsl/run.sh；详细命令见 docs/environment.md。",
+    lines += ["更新项目后执行 bash src/run.sh --release 构建并启动；详细命令见 docs/environment.md。",
               ""]
     return "\n".join(lines)
 

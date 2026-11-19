@@ -1,8 +1,23 @@
 """CPU-only guards for versioned TF32 references and unchanged FP32 precision."""
 import copy
+import json
 import unittest
 
 import test_business as business
+
+
+class ModelRepositoryTest(unittest.TestCase):
+    def test_tf32_reference_uses_the_engine_in_the_model_repository(self):
+        directory = business.PROJECT / "tests/fixtures"
+        models = json.loads((business.PROJECT / "config/models.json").read_text(encoding="utf-8"))["models"]
+        model = next(item for item in models if (item["id"], item["businessVersion"]) == business.TF32_VERSION)
+        fixtures = json.loads((directory / "fixtures.json").read_text(encoding="utf-8"))["fixtures"]
+        fixture = next(item for item in fixtures if item["modelId"] == model["id"])
+        expected = json.loads((directory / "expected-baseline.json").read_text(encoding="utf-8"))
+
+        reference = business.load_tf32_reference(directory, model, fixture, expected)
+
+        self.assertEqual(len(reference["references"]), 36)
 
 
 class BusinessReferenceTest(unittest.TestCase):

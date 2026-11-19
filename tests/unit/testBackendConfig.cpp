@@ -55,6 +55,14 @@ TEST_F(BackendConfigTest, ResolvesRepositoryAndKeepsBusinessVersionSeparate)
     EXPECT_FALSE(config.autoStart);
 }
 
+TEST_F(BackendConfigTest, DefaultsRepositoryToModelBuildDirectory)
+{
+    const auto path = directory / "server.yaml";
+    std::ofstream(path) << "server: {}\ntriton: {}\n";
+    const auto config = triton_backend::loadBackendConfig(path.string());
+    EXPECT_EQ(config.runtime.repository, (directory.parent_path() / "models/model_build").string());
+}
+
 TEST_F(BackendConfigTest, LoadsExplicitBatchingAndInstanceConfiguration)
 {
     model["batching"] = {{"maxBatchSize", 8}, {"preferredBatchSizes", {4}}, {"maxQueueDelayMicroseconds", 10000}};

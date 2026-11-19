@@ -17,10 +17,11 @@ import sync_wsl
 def small_project_archive(extra_files=None):
     files = {'CMakeLists.txt': b'project(Test)', 'src/app/main.cpp': b'int main() {}',
              'src/api/BackendHttpServer.cpp': b'new HTTP source',
+             'src/run.sh': b'#!/bin/bash\n',
              'config/server.yaml': b'server:\n  port: 6577\n',
-             'models/manifest.json': b'{"models": []}',
-             'scripts/wsl/build.sh': b'#!/bin/bash\n',
-             'scripts/wsl/run.sh': b'#!/bin/bash\n', 'tools/manage.py': b'# helper\n'}
+             'config/models.json': b'{"models": []}',
+             'models/model_build/manifest.json': b'{"models": []}',
+             'tools/manage.py': b'# helper\n'}
     files.update(extra_files or {})
     manifest = {'project': 'triton_back', 'files': {
         name: manage.hashlib.sha256(data).hexdigest() for name, data in files.items()}}
@@ -40,7 +41,8 @@ class ArchiveSafetyTest(unittest.TestCase):
         data = sync_wsl.build_archive(root)
         files, manifest = manage.read_archive(data)
         for name in ('CMakeLists.txt', 'src/app/main.cpp', 'src/api/BackendHttpServer.cpp',
-                     'models/best/1/model.plan', 'scripts/wsl/build.sh'):
+                     'src/run.sh', 'models/model_build/manifest.json',
+                     'models/model_build/yolo26n/1/model.plan', 'models/model_sources/yolo26n.onnx'):
             with self.subTest(name=name):
                 self.assertEqual(files[name], (root / name).read_bytes())
                 self.assertEqual(manifest['files'][name], manage.hashlib.sha256(files[name]).hexdigest())
@@ -89,7 +91,8 @@ class ArchiveSafetyTest(unittest.TestCase):
     def test_model_hash_mismatch_is_rejected(self):
         root = Path(__file__).resolve().parents[1]
         files, _ = manage.read_archive(sync_wsl.build_archive(root))
-        files['models/best/1/model.plan'] = b'wrong-engine'
+        plan = 'models/model_build/yolo26n/1/model.plan'
+        files[plan] = b'wrong-engine'
         manifest = {'project': 'triton_back', 'files': {
             name: manage.hashlib.sha256(data).hexdigest() for name, data in files.items()}}
         files['.project-sync-manifest.json'] = json.dumps(manifest).encode()
@@ -99,7 +102,7 @@ class ArchiveSafetyTest(unittest.TestCase):
                 entry = tarfile.TarInfo(name)
                 entry.size = len(data)
                 archive.addfile(entry, io.BytesIO(data))
-        with self.assertRaisesRegex(ValueError, 'Model checksum mismatch'):
+        with self.assertRaisesRegex(ValueError, 'Model checksum mismatch: ' + plan):
             manage.read_archive(stream.getvalue())
 
     def test_existing_configuration_is_preserved_with_review_candidate(self):

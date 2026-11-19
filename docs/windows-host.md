@@ -1,24 +1,16 @@
 # Windows 上位机启动推理后端
 
-推荐上位机启动并保留一个前台 `wsl.exe` 进程，由 WSL 的 `run.sh` 最终 exec C++ 服务。本机 HTTP 通信地址为 `http://127.0.0.1:6577`；局域网其他电脑使用镜像网络下的 Windows 服务器局域网地址。运行时无需 Windows Python、旧 Python 控制服务或 D 盘源码；更新与构建是单独的部署动作。
+上位机可启动并保留一个前台 `wsl.exe` 进程，由 WSL 内的 `tools/manage.py foreground` 启动 C++ 服务。本机 HTTP 地址为 `http://127.0.0.1:6577`。局域网其他电脑通过镜像网络访问 Windows 服务器的局域网地址。发布 `bin/triton_backend` 的步骤见 [部署说明](deployment.md)。
 
-PowerShell 的 RemoteSigned 策略可能将 WSL UNC 路径中的脚本视为未签名的远程文件。对已审查的项目脚本，可用独立进程运行，例如 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\backend.ps1 -Action Status`；该选项只影响这个子进程，不修改已保存的执行策略，也不授予管理员权限。防火墙配置仍需管理员 PowerShell；C# 直接启动 `wsl.exe` 不受 PowerShell 脚本策略影响。
-
-## 已提供的 PowerShell 工具
+## PowerShell 前台启动
 
 ```powershell
-D:\codes\triton_back\scripts\windows\backend.ps1 -Action Start -Distribution template-clone -ModelId best -ModelVersion 2.0.0
-D:\codes\triton_back\scripts\windows\backend.ps1 -Action Status -Distribution template-clone
-D:\codes\triton_back\scripts\windows\backend.ps1 -Action Stop -Distribution template-clone
+wsl.exe -d template-clone --cd /opt/triton_back --exec bash src/run.sh --release --model-id best --model-version 2.0.0
 ```
 
-Start 在后台持有前台 WSL/C++ 进程并隐藏窗口；等待 `GET /api/status`，核对调用者 token。提供 ModelId 和 ModelVersion 时，通过 `POST /api/models/select` 加载目标，并核对返回的 `modelReady: true` 及 `activeModel`。省略这两个参数时只等待 HTTP 可查询并返回状态和目录，不隐式选择模型。重复 Start 复用已验证的该项目进程；没有模型参数就保持其当前选择。启动工具的结果统一放在 `apiStatus` 中。
+此命令构建 Release 后在当前终端启动模型，按 Ctrl+C 正常退出。省略两个模型参数可先启动 HTTP，通过 `GET /api/status` 查询可用版本，再使用 `POST /api/models/select` 指定版本。
 
 `best/2.0.0` 为 FP32 动态合批版；需要测试可选 TF32 版时，将启动参数或选择请求中的版本改为 `3.0.0`。TF32 的传输类型仍为 FP32、每请求仍为一张 PNG；它与 FP32 的检测结果存在数值和少量检测数量变化，见 [部署说明](deployment.md#best-300-可选-tf32-版本) 和 [benchmark 摘要](benchmarks/tf32-20261016.json)。原 `1.0.0`、`2.0.0` 均保留。
-
-C++ stdout/stderr 直接写入 `/opt/triton_back/runtime/logs/service.log`，不会因 PowerShell 退出后无人读取重定向管道而堵塞；Windows 中的日志记录启动器输出。Stop 校验调用者 token 和 Linux 进程身份，先正常停止，必要时仅终止同一管理进程。
-
-工具使用原生 CreateProcess 的限定句柄列表，只传入 NUL stdin 和两个启动器日志文件，避免继承父会话的管道。后台仍由一个前台 WSL 命令持有 C++ 生命周期。
 
 ## 局域网其他电脑调用
 
@@ -32,13 +24,13 @@ C++ stdout/stderr 直接写入 `/opt/triton_back/runtime/logs/service.log`，不
 
 请求字段与本机调用相同。Apifox 导入的 Collection 继续以 localhost 为默认值；在实际选中的环境中，将 `baseUrl` 改为 `http://<服务器Windows局域网IPv4>:6577`。远程 C# 客户端也将 `HttpClient.BaseAddress` 指向该地址，服务器本机的启动与管理示例继续使用 `127.0.0.1`。
 
-先从调用电脑实际请求状态接口，确认 HTTP 返回；需要推理时还应检查 `modelReady` 和 `activeModel`，端口可连接不代表模型服务已就绪。镜像网络无需维护 WSL 内部 IP 的端口映射；服务器局域网 IP 或子网变化后，由管理员重新执行 `lan-access.ps1 -Action Configure` 更新入站规则，并更新客户端地址。脚本的预览、状态查询与移除命令见 [部署说明](deployment.md#局域网访问wsl2-镜像网络)，后端仍通过原有 Start、Stop 操作管理。
+先从调用电脑实际请求状态接口，确认 HTTP 返回。进行推理前检查 `modelReady` 和 `activeModel`。服务器局域网 IP 或子网变化后，由管理员更新入站规则和客户端地址。网络配置见 [部署说明](deployment.md#局域网访问wsl2-镜像网络)。
 
 浏览器网页请求会携带 Origin，需将调用网页实际的协议、主机和端口加入 `config/server.yaml` 的 `allowedOrigins`，然后重启后端。C#、curl 和 Apifox 桌面请求通常不带 Origin，可沿用现有白名单；主动设置 Origin 的请求同样需要匹配白名单。
 
 ## C# 集成
 
-下面展示 .NET 6+ 的启动关键路径。将 `backendProcess` 和 `ownerToken` 保存为上位机成员；两个流持续读取以获得启动器异常。C++ 完整日志保存在 WSL 原生文件中，可另行读取该文件。
+下面展示 .NET 6+ 的受管启动。先按 [部署说明](deployment.md#更新构建和启动) 构建并发布 `bin/triton_backend`。将 `backendProcess` 和 `ownerToken` 保存为上位机成员，持续读取两个流以获取启动器异常。C++ stdout/stderr 写入 WSL 的 `/opt/triton_back/runtime/logs/service.log`。
 
 ```csharp
 using System.Diagnostics;
@@ -57,7 +49,7 @@ var start = new ProcessStartInfo("wsl.exe") {
 foreach (string argument in new[] {
     "-d", distribution, "-u", "root", "--cd", "/opt/triton_back",
     "--exec", "/usr/bin/env", "TRITON_BACK_OWNER_TOKEN=" + ownerToken,
-    "bash", "scripts/wsl/run.sh"
+    "python3", "/opt/triton_back/tools/manage.py", "foreground"
 }) start.ArgumentList.Add(argument);
 
 var backendProcess = new Process { StartInfo = start };
@@ -134,9 +126,9 @@ Linux helper 只接受匹配 token、PID 启动时间及命令行的进程；最
 | `POST /api/models/select` | 明确指定 ModelId、ModelVersion，首次加载与切换共用；只返回最小控制结果 |
 | `POST /infer` | 唯一推理入口，multipart `metadata` 和 PNG 文件二进制 `image`；兼容 Raw |
 
-有效的 `GET /api/status` 查询以 HTTP 200 返回状态；200 表示 HTTP 可访问，`modelReady: true` 才表示当前有模型可以推理。非法取值或值不同的重复 `simple` 参数返回 `400 INVALID_QUERY`。上位机不需要独立模型停止接口；切换自动清理旧模型，关闭后端进程仍使用部署工具的 Stop。
+有效的 `GET /api/status` 查询以 HTTP 200 返回状态，`modelReady: true` 表示当前有模型可以推理。非法取值或值不同的重复 `simple` 参数返回 `400 INVALID_QUERY`。切换自动清理旧模型，关闭受管进程使用 `tools/manage.py stop`。
 
-本次接口收敛有兼容性变更：旧 `/health`、`/api/health`、`/api/info`、`/api/models`、`/api/start`、`/api/stop` 路由已移除，调用返回 404。旧查询能力统一读取 `/api/status`，其 `models` 从扁平列表改为按 ID 分组的 `models[].versions`；首次加载也必须向选择接口明确传入两个字段。旧启动脚本输出中的 `readiness.health` 改为 `apiStatus`，上位机需要同步更新。
+旧 `/health`、`/api/health`、`/api/info`、`/api/models`、`/api/start`、`/api/stop` 路由已移除，调用返回 404。查询统一读取 `/api/status`，其 `models` 从扁平列表改为按 ID 分组的 `models[].versions`，首次加载也必须向选择接口明确传入两个字段。
 
 上位机保持比例缩放后编码为 PNG 上传；服务解码后完成 letterbox 和模型前处理，再把检测框还原到上传 PNG 的像素坐标。每帧携带 RequestId、FrameId、CameraId 等标识，结果回显用来对应相机和帧。遇到 503 SERVICE_BUSY 时由上位机执行队列限流或丢弃过期帧，避免无界积压。
 
@@ -173,7 +165,7 @@ Linux helper 只接受匹配 token、PID 启动时间及命令行的进程；最
 
 查询 `GET /api/status`，`models` 按业务模型分组，`versions` 数组包含每个已注册版本的 `version`、`tritonVersion`、`inputSize`、`classCount`、`available`、`active`、`ready`，以及 `inputs`、`outputs` 张量名称、类型和形状。`available` 表示相应 `model.plan` 文件存在，不表示已经通过加载和准确率验证。`activeModel` 为当前接收新请求的模型，首次启动尚未选择时为 null。
 
-当前 `best/2.0.0` 对应动态 batch Engine，固定 960 输入、FP32、禁用 TF32，支持 batch 1–8，最佳构建批量为 4。状态的 `batching` 包含 `maxBatchSize`、`preferredBatchSizes`、`maxQueueDelayMicroseconds`，`instanceCount` 显示 GPU 实例数；默认分别为 8、`[4]`、10000 微秒及 1 个实例。`inputs.shape` 为 `[-1,3,960,960]`，`outputs.shape` 为 `[-1,300,6]`，`-1` 是内部动态批量轴。`batchSize: 1` 表示每个 HTTP 请求仍是一张图，不表示 GPU 每次只执行一张；原 `best/1.0.0` 继续可选。
+当前 `best/2.0.0` 对应动态 batch Engine，固定 960 输入、FP32、禁用 TF32，支持 batch 1–8，最佳构建批量为 4。状态的 `batching` 包含 `maxBatchSize`、`preferredBatchSizes`、`maxQueueDelayMicroseconds`，`instanceCount` 显示 GPU 实例数。项目配置分别为 8、`[4]`、0 微秒及 1 个实例。`inputs.shape` 为 `[-1,3,960,960]`，`outputs.shape` 为 `[-1,300,6]`，`-1` 是内部动态批量轴。`batchSize: 1` 表示每个 HTTP 请求是一张图，多个请求可合为同一 GPU 批次。`best/1.0.0` 继续可选。
 
 | 完整响应的状态字段 | 含义 |
 |---|---|
@@ -262,14 +254,14 @@ selectedModelVersion = nextModelVersion;
 | 503 BACKEND_NOT_READY | 首次加载尚未成功、尚无活动模型，或进程正在退出 |
 | 409 MODEL_NOT_ACTIVE | 推理请求选择与当前活动模型版本不符 |
 
-版本注册仍使用 config/models.json：复制一条完整模型记录，保留相同 id 和 tritonName，设置新的 businessVersion、tritonVersion，并核对 inputSize、classNames。业务版本和整数版本组合必须唯一，Engine 放在 models/<tritonName>/<tritonVersion>/model.plan。未注册的磁盘目录不会成为可选择的业务版本；新增注册记录后重启进程。
+在 `config/models.json` 注册版本时，复制一条完整记录，保留相同 `id` 和 `tritonName`，设置新的 `businessVersion`、`tritonVersion`，并核对 `inputSize`、`classNames`。业务版本和整数版本组合必须唯一。Engine 放在 `models/model_build/<tritonName>/<tritonVersion>/model.plan`，新增注册记录后重启进程。
 
 指定版本加载由服务按 `config/models.json` 生成完整 Triton 配置，包括 FP32 images/output0 契约、指定版本、batching 和 instanceCount，覆盖仓库 config.pbtxt；后者保留旧版静态单图配置作为后备。每次加载具有独立的内部实例，允许相同模型的不同版本在切换期间共存。修改合批或实例字段后需重启整个 C++ 进程，选择接口不重新读取配置；超过当前 Engine 的 batch 上限 8 需重建模型。不要在运行期间覆盖旧实例仍可能使用的 Engine 文件。完整配置与重建命令见 [deployment.md](deployment.md)。
 
 若上位机在启动前已知目标，也可以通过进程参数直接加载：
 
 ```text
-wsl.exe -d template-clone -u root --cd /opt/triton_back --exec bash scripts/wsl/run.sh --model-id best --model-version 2.0.0
+wsl.exe -d template-clone -u root --cd /opt/triton_back --exec python3 /opt/triton_back/tools/manage.py foreground --model-id best --model-version 2.0.0
 ```
 
 两个参数必须同时提供。底层 C++ 同样支持 `triton_backend --config /opt/triton_back/config/server.yaml --model-id best --model-version 2.0.0`。指定模型加载成功后才开放 HTTP；模型或版本不存在时输出带错误码的消息并以非零状态退出。上位机使用 ProcessStartInfo.ArgumentList 逐项传递参数，并保存 owner token 及前台 WSL 进程。
@@ -304,7 +296,7 @@ wsl.exe -d template-clone -u root --cd /opt/triton_back --exec bash scripts/wsl/
 
 除 `ConfidenceThreshold` 可省略（默认 0.25）外，示例字段均为必填。`Width`、`Height` 为 PNG 本身的像素尺寸，不是缩放前相机尺寸，也不是模型输入尺寸。`SourcePixelFormat` 记录相机源像素格式，实际颜色解码由 PNG 文件决定；`PixelFormat`、`StrideBytes`、`RowOrder` 不必提供。标识字段按原值回显，检测框位于上传 PNG 的坐标系。
 
-使用动态版时 metadata 的 `ModelVersion` 保持与当前选择的 `2.0.0` 一致，每个请求仍只上传一张 PNG，无需把四张图拼接成一张。四路相机可以并发提交各自请求，Triton 尽量合成 4 张；10 毫秒等待预算耗尽可执行小批次，不保证四张来自不同相机或同一拍次。每个响应仍只对应自己的 RequestId、CameraId、FrameId，客户端需按这些字段关联结果。相机数及等待策略由部署配置的 `batching` 决定，不通过单帧 metadata 修改。
+使用动态版时，metadata 的 `ModelVersion` 与当前选择的 `2.0.0` 一致，每个请求上传一张 PNG。四路相机可以并发提交各自请求，Triton 会根据已排队的请求组成批次，`2.0.0` 的当前凑批等待预算为 0 微秒。每个响应对应自己的 RequestId、CameraId、FrameId，客户端按这些字段关联结果。部署配置的 `batching` 决定合批策略。
 
 支持每通道最多 8 位的灰度、彩色和带透明通道 PNG。透明通道被忽略，不与背景合成；不应用 EXIF 方向旋转。16 位 PNG 会被拒绝，避免静默改变相机数值。PNG 解码后的三通道 BGR 像素最多 64 MiB，整个 HTTP 请求默认最多 64 MiB。非法、损坏、超限、位深不支持或宽高不匹配的 PNG 返回 `400 INVALID_PNG_IMAGE`。
 

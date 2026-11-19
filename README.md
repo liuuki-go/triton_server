@@ -1,10 +1,10 @@
 # Triton Back
 
-独立的 C++ 模型后端。项目自带源码、配置、两个 TensorRT 模型仓库、ONNX 源文件及真实像素测试样本。将项目同步到具有已验证环境的 WSL 后，在原生 Linux 文件系统中构建、运行；编译和推理均不需要其他工程的文件。
+独立的 C++ 模型后端。项目自带源码、配置、包含两个模型的 Triton 仓库、ONNX 源文件及真实像素测试样本。将项目同步到具有已验证环境的 WSL 后，在原生 Linux 文件系统中构建、运行；编译和推理均不需要其他工程的文件。
 
 ## 按职责分层
 
-生产 C++ 源码统一放在 `src/`；测试、运行配置、模型、部署脚本和文档仍保留在项目根目录各自的文件夹中。
+生产 C++ 源码统一放在 `src/`，测试、运行配置、模型、部署工具和文档分别保存在项目根目录的各个文件夹中。
 
 | 目录 | 职责 |
 | --- | --- |
@@ -17,10 +17,8 @@
 | `src/domain/` | 原始图像、检测结果、请求和错误定义 |
 | `src/inference/` | PNG 解码、原始像素转换、CPU 前处理、检测解析与坐标还原 |
 | `config/` | 服务配置与业务模型注册信息 |
-| `models/` | Triton 模型仓库与 Engine/ONNX 校验清单 |
-| `model_sources/` | 两个原始 ONNX，用于后续重新生成 Engine |
-| `scripts/windows/` | Windows 同步、构建、启动、停止、状态查询入口 |
-| `scripts/wsl/` | WSL 原生构建与前台启动入口 |
+| `models/model_build/` | Triton 模型仓库，包含 TensorRT Engine、Triton 配置和校验清单 |
+| `models/model_sources/` | 两个原始 ONNX，用于重新生成 Engine |
 | `tools/` | 部署管理、安全同步、环境信息采集工具 |
 | `tests/` | 单元测试、GPU 集成、真实图片业务与 HTTP 协议验证 |
 | `docs/` | Windows 上位机接入、部署和环境说明 |
@@ -49,7 +47,6 @@ WSL 原生项目目录为 `/opt/triton_back`，运行库位于 `/opt/triton/2.71
 cd /opt
 git clone https://github.com/liuuki-go/triton_server.git triton_back
 cd /opt/triton_back
-bash scripts/wsl/build.sh 4
 ```
 
 仓库包含源码、配置、正式 Plan、ONNX、测试及文档；`runtime/`、`build/`、`bin/`、Python 缓存和本机环境状态快照不入库。构建会创建需要的运行目录和可执行文件；Triton、CUDA、TensorRT 系统运行库需要事先配置。
@@ -68,28 +65,13 @@ bash src/run.sh --release --model-id best --model-version 2.0.0
 
 `src/app/main.cpp` 中的 `main()` 是 C++ 服务入口，由 CMake 编译成可执行程序；`src/run.sh` 负责构建并直接运行它。此研发入口按脚本位置查找可写项目目录，不要求固定 `/opt/triton_back` 或使用 Windows 管理工具。运行仍需要已安装项目依赖；`TRITON_ROOT` 环境变量应与 YAML 的 `triton.root` 一致，默认 `/opt/triton/2.71.0`。
 
-在 Windows PowerShell 中执行：
+从 Windows PowerShell 直接启动 WSL 中的后端：
 
 ```powershell
-& D:\codes\triton_back\scripts\windows\backend.ps1 -Action Sync -Distribution template-clone
-& D:\codes\triton_back\scripts\windows\backend.ps1 -Action Build -Distribution template-clone
-& D:\codes\triton_back\scripts\windows\backend.ps1 -Action Start -Distribution template-clone
-& D:\codes\triton_back\scripts\windows\backend.ps1 -Action Status -Distribution template-clone
+wsl.exe -d template-clone --cd /opt/triton_back --exec bash src/run.sh --release
 ```
 
-`Sync` 更新 WSL 原生项目文件并检查传输内容，排除 Windows 的运行状态、构建目录和缓存。已有部署配置默认保留，新的配置供审查；确认需要使用项目配置时可传 `-ReplaceConfig`。`Build` 进行 Release 构建、CPU 测试并发布二进制。`Start` 持有前台 WSL 会话，启动 C++ 进程并等待状态可查询；同时提供 `-ModelId best -ModelVersion 2.0.0` 才会加载指定模型。
-
-本机部分 C++ 源文件由 Windows 文件系统透明加密；直接从 WSL 读取挂载源码会得到物理密文。同步工具使用 Windows Python 的正常文件读取接口获取源码，按实际字节长度打包并校验后写入 WSL 原生文件系统。同步时自动寻找可用 Python，也可传 `-PythonExe`；启动、停止和状态查询不要求 Windows Python。工具不修改文件加密或系统安全设置。
-
-若已经在 WSL 原生目录更新了完整项目，可直接构建和运行：
-
-```bash
-cd /opt/triton_back
-bash scripts/wsl/build.sh
-bash scripts/wsl/run.sh
-```
-
-`run.sh` 保持前台进程。默认 `autoStart: false`，未指定模型时只开放 HTTP，由上位机查询目录并调用 `POST /api/models/select` 加载模型。直接启动二进制时使用 `--config /opt/triton_back/config/server.yaml`；无参数运行也优先查找二进制旁的部署配置。
+从 Windows checkout 更新 WSL 原生项目时，用 Windows Python 运行 `tools/sync_wsl.py`，由工具读取文件实际内容、打包并校验。已有部署配置默认保留，从旧布局迁移时应将保留配置中的 `triton.repository` 更新为 `../models/model_build`。受管启动及完整同步命令见 [部署说明](docs/deployment.md)。
 
 环境克隆的命令及限制见 [environment.md](docs/environment.md)。WSL 克隆保留 Linux 运行库，GPU 驱动来自 Windows；更换 GPU 或 TensorRT 版本后应重新验证或构建 Engine。
 
@@ -111,17 +93,11 @@ PNG 的 `Width`、`Height` 必须与文件像素尺寸一致，`PixelFormat`、`
 
 Apifox 调试可直接导入 [Postman Collection 文件](docs/triton-back.postman_collection.json)：在「导入」中选择 Postman，上传 JSON，并同时导入、选中同名环境。文件包含以上三个接口和 `best / 2.0.0` 请求示例，默认地址 `http://127.0.0.1:6577`，首个请求默认查询简版状态；禁用 `simple` 参数或改为 `false` 可查询完整版。推理前在 `image` 中选择本地 PNG，将 `metadata` 的 `Width`、`Height` 改为图片实际尺寸，并确认该表单字段的 Content-Type 为 `application/json`。
 
-局域网部署采用 WSL2 镜像网络（mirrored）。当前 `config/server.yaml` 使用 `server.host: "0.0.0.0"` 监听 WSL 的 IPv4 接口，本机管理仍使用 `127.0.0.1`。启用镜像网络后，在 Windows 管理员 PowerShell 中执行 `.\scripts\windows\lan-access.ps1 -Action Configure -Distribution template-clone -InterfaceAlias WLAN -Port 6577`，维护 Windows 和 Hyper-V 的局域网入站规则；实际网卡名应与服务器一致。其他电脑通过 Windows 服务器的局域网地址直接调用，无需 NAT 端口代理，将 Apifox 环境的 `baseUrl` 改为 `http://<服务器Windows局域网IPv4>:6577`，三个接口路径不变。网络、脚本预览与启动说明见 [deployment.md](docs/deployment.md)，远程调用说明见 [windows-host.md](docs/windows-host.md)。
+局域网部署采用 WSL2 镜像网络（mirrored）。当前 `config/server.yaml` 使用 `server.host: "0.0.0.0"` 监听 WSL 的 IPv4 接口，本机管理仍使用 `127.0.0.1`。在 Windows 和 Hyper-V 入站规则允许 TCP 6577 后，其他电脑通过 Windows 服务器的局域网地址直接调用，将 Apifox 环境的 `baseUrl` 改为 `http://<服务器Windows局域网IPv4>:6577`。网络配置和远程调用见 [deployment.md](docs/deployment.md) 与 [windows-host.md](docs/windows-host.md)。
 
 上位机只做等比例缩放；后端负责 letterbox、RGB/NCHW/归一化和坐标还原。返回框位于上传图像坐标系，并回显请求关联字段。详细启动流程与 C# 示例见 [windows-host.md](docs/windows-host.md)。
 
-结束整个进程使用：
-
-```powershell
-& D:\codes\triton_back\scripts\windows\backend.ps1 -Action Stop -Distribution template-clone
-```
-
-不提供单独的模型停止接口。切换成功后，旧模型处理完已经接收的请求便自动卸载。管理工具结束进程时先发送 SIGTERM，排空请求并清理模型；超时后重新核验 PID/启动时间/owner token，再结束对应进程。
+前台启动时按 Ctrl+C 停止进程。切换成功后，旧模型处理完已经接收的请求便自动卸载。受管进程的停止步骤见 [Windows 接入说明](docs/windows-host.md#c-集成)。
 
 ## 配置与当前范围
 
@@ -131,40 +107,41 @@ Apifox 调试可直接导入 [Postman Collection 文件](docs/triton-back.postma
 
 切换期间显存需容纳新旧实例，显存不足会返回加载错误并保持旧模型；并行加载和推理仍可能出现延迟波动。旧实例清理错误通过 `retiringModels[].cleanupError` 单独报告并重试，不把已成功生效的新模型标记为切换失败。
 
-已知模型版本时，也可随进程启动参数传入：`bash scripts/wsl/run.sh --model-id best --model-version 2.0.0`。Windows 工具对应 `-Action Start -ModelId best -ModelVersion 2.0.0`；完整协议和 C# 示例见接入文档。
+已知模型版本时，可随 `bash src/run.sh --model-id best --model-version 2.0.0` 传入。完整协议和 C# 示例见 [Windows 接入说明](docs/windows-host.md)。
 
-`best/1.0.0` 保留原单图 Engine；`best/2.0.0` 使用新建的 FP32、禁用 TF32 的动态 batch Engine，输入固定 960，batch profile 为最小 1、最佳 4、最大 8。默认 `instanceCount: 1`，`batching` 为 `maxBatchSize: 8`、`preferredBatchSizes: [4]`、`maxQueueDelayMicroseconds: 10000`，面向默认 4 相机并发。每个 HTTP 请求仍上传一张 PNG；Triton 尽量合成 4 张执行，等待预算耗尽可执行小批次，不保证来自不同相机或同一拍次。调整首选批量和等待时间无需重建 Engine，批量超过 8 则必须重建；配置与重建命令见 [deployment.md](docs/deployment.md)。
+`best/1.0.0` 使用原单图 Engine；`best/2.0.0` 使用禁用 TF32 的 FP32 动态 batch Engine，输入固定 960，batch profile 为最小 1、最佳 4、最大 8。项目配置为 `instanceCount: 1`、`maxBatchSize: 8`、`preferredBatchSizes: [4]`、`maxQueueDelayMicroseconds: 0`。每个 HTTP 请求上传一张 PNG，Triton 可以合并已经排队的请求，当前等待预算为 0。调整首选批量和等待时间无需重建 Engine，批量超过 8 则必须重建。配置与重建命令见 [deployment.md](docs/deployment.md)。
 
 `best` 各版本均为 20 类；`yolo26n/1.0.0` 为 640 输入、80 类，继续使用单图模式。动态模型状态中的张量为 `images[-1,3,960,960]`、`output0[-1,300,6]`，`-1` 表示内部 batch 轴；单个请求仍返回自己的检测结果。通过 `activeModel.executionStatistics` 的执行计数和 `batch_stats` 核对实际合批，不能只看客户端并发数。
 
-`best/3.0.0` 是可选的 TF32 版本，映射到 `models/best/3/model.plan`，沿用相同 960 输入、1/4/8 profile 和合批配置。输入输出仍为 FP32，内部允许 TF32 与 FP32 执行策略混用；重建命令见 [deployment.md](docs/deployment.md)。选择方式为 `ModelId: "best"`、`ModelVersion: "3.0.0"`，或启动时传 `-ModelId best -ModelVersion 3.0.0`。示例继续选择 FP32 的 `2.0.0`。
+`best/3.0.0` 是可选的 TF32 版本，映射到 `models/model_build/best/3/model.plan`，使用相同的 960 输入和 1/4/8 profile，项目配置的合批等待预算为 10000 微秒。输入输出仍为 FP32，内部允许 TF32 与 FP32 执行策略混用。选择方式为 `ModelId: "best"`、`ModelVersion: "3.0.0"`，或启动时传 `--model-id best --model-version 3.0.0`。重建命令见 [deployment.md](docs/deployment.md)。
 
 TF32 不满足原 FP32 的数值一致性阈值：377 张对照有 5 张检测数量变化；在数量和类别分布相同的图片中，对应框最大置信度差约 0.0885、最大坐标差约 10.30 像素。此比较没有标注真值，不能判断准确率升降。仓库保存了 [本机 benchmark 与差异摘要](docs/benchmarks/tf32-20261016.json)，TF32 的传输回归使用同一 Engine、同一像素、各实际 batch 的独立直接 TensorRT 参考；原 FP32 参考及其严格阈值保持不变。
 
-同轮四相机测试中，FP32 `2.0.0` → TF32 `3.0.0` 的吞吐量中位数：WSL 内为 **25.40 → 28.05 张/秒（+10.4%）**，Windows 上位机路径为 **25.33 → 29.05 张/秒（+14.7%）**。测量采用相同图片、批量配置、预热和三轮重复；各实际批量统计及延迟分布保存在上述摘要中。
+历史四相机测试中，FP32 `2.0.0` → TF32 `3.0.0` 的吞吐量中位数：WSL 内为 **25.40 → 28.05 张/秒（+10.4%）**，Windows 上位机路径为 **25.33 → 29.05 张/秒（+14.7%）**。测量采用相同图片、合批等待预算（10000 微秒）、预热和三轮重复。各实际批量统计及延迟分布保存在上述摘要中。
 
 完整请求最多 8 个在途，满时返回 `503 SERVICE_BUSY`。`timingsMs.tritonRequest` 包含合批等待、排队、传输和执行，并非纯 GPU 时间。大量慢速上传耗尽 HTTP 工作线程时，控制接口仍可能延迟。
 
-本机使用 377 张光伏缺陷图片、每轮四路同时发图且等全部返回、三轮测试：旧版到动态合批版本的吞吐量中位数，WSL 内为 20.34 → 25.83 张/秒，Windows 上位机路径为 20.39 → 24.90 张/秒。实际批量统计、逐图数值对照和完整参数见 `build/dynamic-batch-20261016/summary.json`；结果对应本机和该负载，未标定其他硬件或负载的吞吐上限。真实图片参考用于检查迁移结果，不能替代标注数据的准确率验证。
+本机使用 377 张光伏缺陷图片、每轮四路同时发图且等全部返回、三轮测试：旧版到动态合批版本的吞吐量中位数，WSL 内为 20.34 → 25.83 张/秒，Windows 上位机路径为 20.39 → 24.90 张/秒。实际批量统计、逐图数值对照和完整参数曾保存在本机 `build/dynamic-batch-20261016/summary.json`；结果对应本机和该负载，未标定其他硬件或负载的吞吐上限。真实图片参考用于检查迁移结果，不能替代标注数据的准确率验证。
 
 ## 验证
 
 ```bash
 cd /opt/triton_back
 source /opt/triton/2.71.0/setup_env.sh
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+cmake --build build --parallel 4
 ctest --test-dir build -L unit --no-tests=error --output-on-failure
 ctest --test-dir build -L gpu --no-tests=error --output-on-failure
-python3 tests/integration/test_business.py
 python3 tests/integration/test_business_reference.py
 python3 tests/scripts/test_run.py
-python3 tests/protocol/testProtocol.py --output build/verification/protocol-report.json
 python3 tools/environment/collect_environment.py --output /root/system_env_info.txt --copy-to docs/system_env_info.txt
 ```
 
-Windows 下可单独验证局域网脚本的地址、子网及规则归属检查；此测试不执行网络或防火墙命令：
+运行 HTTP 测试前，在另一个终端用 `bash src/run.sh --release` 启动后端并保持运行。
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\scripts\test_lan_access.ps1
+```bash
+python3 tests/integration/test_business.py
+python3 tests/protocol/testProtocol.py --output build/verification/protocol-report.json
 ```
 
-GPU 集成测试使用本项目的两个 raw 输入及保存的直接 TensorRT 检测参考，检查模型生命周期、版本切换、失败保持旧模型、并发背压和旧请求排空，以及 FP32 / TF32 各实际批量的结果对照。业务测试依次选择全部已配置模型版本，验证 PNG/Raw 及当前模型下的混合编码并发。协议测试会执行模型加载与切换，运行这些测试时应安排专用测试窗口。本地完整日志位于 `build/verification`、`build/dynamic-batch-20261016`、`build/tf32-batch-20261016`，不入库；TF32 摘要保存在 `docs/benchmarks`。环境采集命令生成 `/root/system_env_info.txt` 及可选的 `docs/system_env_info.txt` 本机快照，均不作为仓库交付文件。
+GPU 集成测试使用本项目的两个 raw 输入及保存的直接 TensorRT 检测参考，检查模型生命周期、版本切换、失败保持旧模型、并发背压和旧请求排空，以及 FP32 / TF32 各实际批量的结果对照。业务测试依次选择全部已配置模型版本，验证 PNG/Raw 及当前模型下的混合编码并发。协议测试会执行模型加载与切换，运行这些测试时应安排专用测试窗口。新生成的业务和协议报告写入 `build/verification`。历史完整日志曾写入本机 `build/dynamic-batch-20261016` 和 `build/tf32-batch-20261016`，TF32 摘要保存在 `docs/benchmarks`。环境采集命令生成 `/root/system_env_info.txt` 及可选的 `docs/system_env_info.txt` 本机快照，均不作为仓库交付文件。

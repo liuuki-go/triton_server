@@ -98,7 +98,7 @@ BackendConfig loadBackendConfig(const std::string& path)
         for (const auto& origin : server["allowedOrigins"]) config.server.allowedOrigins.push_back(origin.as<std::string>());
     }
     config.runtime.root = relativePath(directory, text(triton, "root", "/opt/triton/2.71.0"));
-    config.runtime.repository = relativePath(directory, text(triton, "repository", "../models"));
+    config.runtime.repository = relativePath(directory, text(triton, "repository", "../models/model_build"));
     config.runtime.maxInFlight = integer(triton, "maxInFlight", 8, 1, 1023);
     if (config.runtime.maxInFlight >= config.server.workerCount)
         throw std::invalid_argument("workerCount 必须大于 maxInFlight，为控制请求保留线程");
